@@ -1,0 +1,77 @@
+sequenceDiagram
+    participant User
+    participant React Frontend
+    participant Zustand Store
+    participant Tauri Invoke
+    participant Rust Backend
+    participant FFmpeg
+    participant nokhwa
+    participant File System (clips/)
+
+    %% Import Video Flow
+    User->>React Frontend: Drag/drop or select MP4/MOV file
+    React Frontend->>Tauri Invoke: invoke('import_file', {path, dest})
+    Tauri Invoke->>Rust Backend: import_file command
+    Rust Backend->>FFmpeg: ffprobe for metadata
+    FFmpeg-->>Rust Backend: JSON metadata
+    Rust Backend->>File System (clips/): Copy file to clips/
+    Rust Backend-->>Tauri Invoke: Return metadata JSON
+    Tauri Invoke-->>React Frontend: Metadata
+    React Frontend->>Zustand Store: addClip with metadata
+    Zustand Store-->>React Frontend: Update timeline
+
+    %% Webcam Recording Flow
+    User->>React Frontend: Click Record Webcam
+    React Frontend->>Tauri Invoke: invoke('record_webcam_clip', {output, duration})
+    Tauri Invoke->>Rust Backend: record_webcam_clip command
+    Rust Backend->>nokhwa: Camera capture frames
+    nokhwa-->>Rust Backend: Raw video frames
+    Rust Backend->>FFmpeg: Pipe frames to MP4
+    FFmpeg-->>File System (clips/): Save webcam.mp4
+    Rust Backend-->>Tauri Invoke: Return output path
+    Tauri Invoke-->>React Frontend: Path
+    React Frontend->>Zustand Store: addClip with path
+    Zustand Store-->>React Frontend: Update timeline
+
+    %% Screen Recording Flow
+    User->>React Frontend: Click Record Screen
+    React Frontend->>React Frontend: navigator.mediaDevices.getDisplayMedia()
+    React Frontend->>React Frontend: MediaRecorder start
+    React Frontend->>React Frontend: Collect chunks into WebM blob
+    React Frontend->>Tauri Invoke: invoke('save_recording', {path, data})
+    Tauri Invoke->>Rust Backend: save_recording command
+    Rust Backend->>File System (clips/): Write blob data to screen.webm
+    Rust Backend-->>Tauri Invoke: Success
+    Tauri Invoke-->>React Frontend: Success
+    React Frontend->>Zustand Store: addClip with path
+    Zustand Store-->>React Frontend: Update timeline
+
+    %% Trim Video Flow
+    User->>React Frontend: Drag trim handles on timeline
+    React Frontend->>Tauri Invoke: invoke('trim_clip', {input, output, start, end})
+    Tauri Invoke->>Rust Backend: trim_clip command
+    Rust Backend->>FFmpeg: FFmpeg trim with -c copy
+    FFmpeg-->>File System (clips/): Save trimmed clip
+    Rust Backend-->>Tauri Invoke: Success
+    Tauri Invoke-->>React Frontend: Success
+    React Frontend->>Zustand Store: Update clip metadata
+    Zustand Store-->>React Frontend: Update timeline
+
+    %% Export Video Flow
+    User->>React Frontend: Click Export
+    React Frontend->>Tauri Invoke: invoke('export_video', {inputs, output, resolution})
+    Tauri Invoke->>Rust Backend: export_video command
+    Rust Backend->>FFmpeg: FFmpeg concat and encode
+    FFmpeg-->>Rust Backend: Progress via stderr
+    Rust Backend-->>React Frontend: Progress updates (if implemented)
+    FFmpeg-->>File System (clips/): Save output.mp4
+    Rust Backend-->>Tauri Invoke: Success
+    Tauri Invoke-->>React Frontend: Success
+
+    %% Check FFmpeg Flow
+    React Frontend->>Tauri Invoke: invoke('check_ffmpeg')
+    Tauri Invoke->>Rust Backend: check_ffmpeg command
+    Rust Backend->>FFmpeg: FFmpeg -version
+    FFmpeg-->>Rust Backend: Version string
+    Rust Backend-->>Tauri Invoke: Version or error
+    Tauri Invoke-->>React Frontend: Display status

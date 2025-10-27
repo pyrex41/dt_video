@@ -1,0 +1,173 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Scaffold Tauri Project",
+        "description": "Create a new Tauri project with React frontend for ClipForge.",
+        "details": "Run `cargo create-tauri-app clipforge --frontend react` to scaffold the project structure. Ensure the project is set up for cross-platform support on macOS and Windows. This includes initializing the `src-tauri/` directory with Rust code and the frontend directory with React.",
+        "testStrategy": "Verify that the project builds successfully with `cargo tauri dev` and the React frontend loads without errors.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Download and Place FFmpeg Binaries",
+        "description": "Acquire static FFmpeg binaries for macOS and Windows and place them in the project.",
+        "details": "Download FFmpeg static binaries from https://ffmpeg.org/download.html for macOS (aarch64-apple-darwin) and Windows (x86_64-pc-windows-msvc). Place them in `src-tauri/binaries/` with names like `ffmpeg-aarch64-apple-darwin` and `ffmpeg-x86_64-pc-windows-msvc.exe`. Ensure the binaries are executable and match the platform architectures.",
+        "testStrategy": "Run the binaries manually to confirm they execute and display version information via `ffmpeg -version`.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Configure tauri.conf.json",
+        "description": "Set up the Tauri configuration file with necessary permissions and settings.",
+        "details": "Update `tauri.conf.json` to include allowlist for fs, dialog, and shell with sidecar enabled. Set security CSP to allow blob, data, filesystem. Add macOS entitlements for camera access. Configure build to include external binaries like `binaries/ffmpeg-$ARCH-$OS`. Set product name to 'ClipForge'.",
+        "testStrategy": "Build the app with `cargo tauri build` and check that the configuration is applied correctly by verifying camera permissions on macOS and binary inclusion in the bundle.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Add Dependencies to Cargo.toml",
+        "description": "Include required Rust crates in the Cargo.toml file.",
+        "details": "Add the specified dependencies: tauri 1.7 with api-all features, tauri-plugin-shell 1.7, nokhwa 0.10.4 with input features, serde 1.0 with derive, serde_json 1.0, tokio 1.38 with rt and process features. Ensure versions match the PRD.",
+        "testStrategy": "Run `cargo check` to verify that all dependencies resolve without errors.",
+        "priority": "high",
+        "dependencies": [
+          1
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Implement check_ffmpeg Command",
+        "description": "Create an async Tauri command to verify FFmpeg availability.",
+        "details": "Implement the check_ffmpeg function as provided in the PRD, using tauri::plugin::shell::Command to run 'ffmpeg -version' as a sidecar. Return version string on success or error message on failure.",
+        "testStrategy": "Invoke the command via Tauri and confirm it returns the FFmpeg version or appropriate error if FFmpeg is not available.",
+        "priority": "medium",
+        "dependencies": [
+          2,
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Implement import_file Command",
+        "description": "Create an async Tauri command to import MP4/MOV files and extract metadata.",
+        "details": "Implement the import_file function as per PRD, using ffprobe to extract duration, resolution, then copy the file to clips/ directory. Handle errors for invalid files or paths.",
+        "testStrategy": "Test with valid MP4/MOV files to ensure metadata is extracted correctly and files are copied. Check error handling with invalid inputs.",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Implement trim_clip Command",
+        "description": "Create an async Tauri command to trim video clips using FFmpeg.",
+        "details": "Implement the trim_clip function using FFmpeg sidecar with -c copy for fast trimming. Take input path, output path, start and end times in seconds.",
+        "testStrategy": "Trim a sample video and verify the output clip matches the specified start/end times and retains original quality.",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Implement export_video Command",
+        "description": "Create an async Tauri command for exporting single or multiple clips to MP4.",
+        "details": "Implement the export_video function using FFmpeg concat demuxer for multi-clip support, with resolution options (720p, 1080p). Parse progress from stderr for updates. Initially support single clip, extend to multi as per final submission.",
+        "testStrategy": "Export a single clip and verify output MP4 at correct resolution. For multi-clip, concatenate and check seamless playback and progress reporting.",
+        "priority": "medium",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 9,
+        "title": "Implement record_webcam_clip Command",
+        "description": "Create an async Tauri command to capture webcam video using nokhwa.",
+        "details": "Implement the record_webcam_clip function using nokhwa to capture at 1280x720, 30fps, MJPG, for specified duration, piping frames to FFmpeg for MP4 output.",
+        "testStrategy": "Record a short clip and verify the output MP4 plays correctly with expected resolution and frame rate.",
+        "priority": "low",
+        "dependencies": [
+          5,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 10,
+        "title": "Implement save_recording Command",
+        "description": "Create an async Tauri command to save screen recording blobs to disk.",
+        "details": "Implement the save_recording function to write Vec<u8> data to a specified path in clips/. Optionally convert WebM to MP4 if needed.",
+        "testStrategy": "Save a sample blob and confirm the file is written correctly and playable.",
+        "priority": "low",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 11,
+        "title": "Update main.rs and Register Commands",
+        "description": "Set up the main function to register all Tauri commands and plugins.",
+        "details": "In main.rs, use tauri::Builder to add tauri-plugin-shell plugin and invoke_handler with generate_handler for all commands: check_ffmpeg, import_file, trim_clip, export_video, record_webcam_clip, save_recording.",
+        "testStrategy": "Build and run the app, then test invoking each command from the frontend to ensure they are registered and functional.",
+        "priority": "medium",
+        "dependencies": [
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 12,
+        "title": "Build and Package the Application",
+        "description": "Compile the app and create native packages for macOS and Windows.",
+        "details": "Run `cargo tauri build` to generate .dmg for macOS and .exe for Windows, ensuring FFmpeg binaries are bundled and bundle size is under 200MB. Verify launch time under 5 seconds.",
+        "testStrategy": "Install and run the packaged app on target platforms, check for FFmpeg availability, perform basic import/trim/export operations, and measure launch time.",
+        "priority": "high",
+        "dependencies": [
+          11
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-10-27T21:28:58.707Z",
+      "updated": "2025-10-27T21:28:58.707Z",
+      "description": "Tasks for master context"
+    }
+  }
+}
