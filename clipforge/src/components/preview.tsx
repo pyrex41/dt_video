@@ -8,6 +8,7 @@ import { useClipStore } from "../store/use-clip-store"
 export function Preview() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const playerRef = useRef<Plyr | null>(null)
+  const isUpdatingFromPlayer = useRef(false)
   const { clips, playhead, isPlaying, setPlayhead, setIsPlaying } = useClipStore()
 
   const currentClip = clips.find((clip) => playhead >= clip.start && playhead < clip.end)
@@ -28,9 +29,13 @@ export function Preview() {
     const player = playerRef.current
 
     player.on("timeupdate", () => {
-      if (currentClip) {
+      if (currentClip && !isUpdatingFromPlayer.current) {
+        isUpdatingFromPlayer.current = true
         const clipTime = player.currentTime + currentClip.start
         setPlayhead(clipTime)
+        setTimeout(() => {
+          isUpdatingFromPlayer.current = false
+        }, 50)
       }
     })
 
@@ -45,12 +50,13 @@ export function Preview() {
   }, [currentClip])
 
   useEffect(() => {
-    if (!playerRef.current || !currentClip) return
+    if (!playerRef.current || !currentClip || isUpdatingFromPlayer.current) return
 
     const player = playerRef.current
     const clipLocalTime = playhead - currentClip.start
 
-    if (Math.abs(player.currentTime - clipLocalTime) > 0.1) {
+    // Only update if there's a significant difference (avoid feedback loop)
+    if (Math.abs(player.currentTime - clipLocalTime) > 0.5) {
       player.currentTime = clipLocalTime
     }
 

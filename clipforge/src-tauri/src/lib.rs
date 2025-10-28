@@ -197,15 +197,20 @@ async fn save_recording(
         let mp4_filename = file_name.replace(".webm", ".mp4");
         let mp4_path = clips_dir.join(&mp4_filename);
 
-        // Run FFmpeg conversion
+        // Run FFmpeg conversion with optimized settings for playback
         let output = Command::new_sidecar("ffmpeg")
             .expect("failed to create ffmpeg command")
             .args(&[
                 "-i", webm_path.to_str().ok_or("Invalid WebM path")?,
+                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",  // Ensure even dimensions
                 "-c:v", "libx264",
+                "-preset", "fast",          // Faster encoding
+                "-crf", "23",               // Good quality/size balance
+                "-movflags", "+faststart",  // Enable streaming/fast playback
                 "-c:a", "aac",
+                "-b:a", "128k",             // Audio bitrate
                 "-strict", "experimental",
-                "-y", // Overwrite output
+                "-y",                       // Overwrite output
                 mp4_path.to_str().ok_or("Invalid MP4 path")?,
             ])
             .output()
