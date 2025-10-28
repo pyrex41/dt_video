@@ -1,0 +1,43 @@
+# Task ID: 9
+# Title: Implement recording features for webcam and screen
+# Status: pending
+# Dependencies: 2, 3
+# Priority: medium
+# Description: Add buttons for webcam capture and screen recording, invoking backend commands and adding recordings to timeline.
+# Details:
+Add viewRecording with buttons for RecordWebcam and RecordScreen. Define ports: recordWebcam : { output : String, duration : Int } -> Cmd msg; saveRecording : { path : String, data : List Int } -> Cmd msg. On record actions, call ports and add resulting clips to timeline.
+
+# Test Strategy:
+Click record webcam; verify backend invoked and clip added; test screen recording similarly.
+
+# Subtasks:
+## 1. Define ports for recording features [pending]
+### Dependencies: None
+### Description: Define the required Elm ports for webcam and screen recording functionality, including recordWebcam and saveRecording.
+### Details:
+In the Elm module, add port declarations: recordWebcam : { output : String, duration : Int } -> Cmd msg; and saveRecording : { path : String, data : List Int } -> Cmd msg. Ensure these ports are properly integrated with the backend commands for capturing and saving recordings.
+
+## 2. Add viewRecording function with buttons [pending]
+### Dependencies: 9.1
+### Description: Create the viewRecording function that renders buttons for RecordWebcam and RecordScreen actions.
+### Details:
+Implement viewRecording as an Html function that returns a div containing two buttons: one for RecordWebcam and one for RecordScreen. Attach onClick handlers to send appropriate Msg values like RecordWebcam and RecordScreen. Style the buttons appropriately for the UI.
+
+## 3. Implement RecordWebcam action in update function [pending]
+### Dependencies: 9.1, 9.2
+### Description: Handle the RecordWebcam Msg by calling the recordWebcam port and preparing to add the resulting clip to the timeline.
+### Details:
+In the update function, add a case for RecordWebcam Msg. Call the recordWebcam port with appropriate parameters (e.g., output path and expected duration). After recording, handle the response to create a new Clip and add it to the model's timeline list.
+
+## 4. Implement RecordScreen action in update function [pending]
+### Dependencies: 9.1, 9.2
+### Description: Handle the RecordScreen Msg by calling the recordWebcam port (or a similar one if needed) and adding the resulting clip to the timeline.
+### Details:
+In the update function, add a case for RecordScreen Msg. Call the appropriate port (likely recordWebcam with screen parameters) to initiate screen recording. Upon completion, process the result to create a Clip and append it to the timeline in the model.
+
+## 5. Integrate recordings into timeline display [pending]
+### Dependencies: 9.3, 9.4
+### Description: Ensure that newly recorded clips from webcam or screen are properly added to the timeline and displayed in the UI.
+### Details:
+After handling the recording actions, update the model to include the new Clip in the timeline list. Modify the viewTimeline or relevant view functions to render these new clips alongside existing ones, showing metadata like duration. Handle any necessary sorting or positioning in the timeline.
+

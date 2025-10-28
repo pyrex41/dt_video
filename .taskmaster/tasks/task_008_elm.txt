@@ -1,0 +1,11 @@
+# Task ID: 8
+# Title: Implement MP4 export functionality
+# Status: pending
+# Dependencies: 2, 3, 7
+# Priority: high
+# Description: Add export button to export single clip to MP4 (720p) via backend export_video command, with progress bar.
+# Details:
+Add viewExport with button onClick ExportVideo. Define port exportVideo : { inputs : List String, output : String, resolution : String } -> Cmd msg. Handle progress via stderr events from backend, updating UI progress bar.
+
+# Test Strategy:
+Click export; verify backend command called with correct params; monitor progress bar during export simulation.

@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom responsive utilities */
+@layer utilities {
+  .bg-gray-850 {
+    background-color: #1a1d23;
+  }
+}
+
+/* Ensure minimum viewport handling */
+body {
+  min-width: 800px;
+  min-height: 600px;
+}

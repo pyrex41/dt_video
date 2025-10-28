@@ -1,0 +1,11 @@
+# Task ID: 4
+# Title: Implement video import functionality
+# Status: pending
+# Dependencies: 2, 3
+# Priority: high
+# Description: Add support for drag-and-drop and file picker to import MP4/MOV files, display clip metadata like duration and resolution.
+# Details:
+Define Clip type alias with fields like id, path, start, end, duration, resolution. Add Msg for AddClip and RequestImport. In view, add button with onClick RequestImport. Use port requestImport : () -> Cmd msg to trigger file picker. Handle file selection via another port to add Clip to model. Display metadata in the UI.
+
+# Test Strategy:
+Test drag-and-drop by dropping a video file; verify file picker opens and selects MP4/MOV; check that metadata is displayed accurately.
