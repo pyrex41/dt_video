@@ -7,27 +7,12 @@
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "clipforge",
+    "productName": "ClipForge",
     "version": "0.1.0"
   },
   "tauri": {
     "allowlist": {
-      "all": false,
-      "fs": {
-        "all": true,
-        "scope": ["$APPDATA/**", "$RESOURCE/**", "$APPDATA/clips/**"]
-      },
-      "dialog": {
-        "open": true
-      },
-      "shell": {
-        "all": true,
-        "sidecar": true,
-        "scope": [
-          { "name": "ffmpeg", "sidecar": true, "args": true },
-          { "name": "ffprobe", "sidecar": true, "args": true }
-        ]
-      }
+      "all": true
     },
     "bundle": {
       "active": true,
@@ -45,17 +30,17 @@
         "binaries/ffprobe"
       ],
       "macOS": {
-        "entitlements": "src-tauri/Entitlements.plist"
+        "entitlements": "Entitlements.plist"
       }
     },
     "security": {
-      "csp": "default-src 'self' blob: data: filesystem: tauri://localhost"
+      "csp": "default-src 'self' blob: data: filesystem: http://tauri.localhost"
     },
     "windows": [
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "clipforge",
+        "title": "ClipForge",
         "width": 800,
         "height": 600
       }

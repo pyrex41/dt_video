@@ -7,6 +7,9 @@ use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
 use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static CAMERA_PERMISSION: AtomicBool = AtomicBool::new(false);
 
 #[derive(Serialize, Deserialize)]
 struct VideoMetadata {
@@ -378,7 +381,12 @@ async fn record_webcam_clip(
         return Err("Duration cannot exceed 5 minutes (300 seconds)".to_string());
     }
 
-    // Initialize camera with requested format: 1280x720, 30fps, MJPEG
+    // Check if camera permission was granted during app initialization
+    if !CAMERA_PERMISSION.load(Ordering::SeqCst) {
+        return Err("Camera permission not granted. Please allow camera access in System Settings and restart the app.".to_string());
+    }
+
+    // Initialize camera with requested format: 1280x720, 30fps
     let index = CameraIndex::Index(0);
     let requested = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
 
@@ -473,6 +481,39 @@ async fn record_webcam_clip(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+  // Initialize nokhwa on macOS before starting Tauri app
+  #[cfg(target_os = "macos")]
+  {
+    use std::sync::{Arc, Mutex};
+    let permission_granted = Arc::new(Mutex::new(false));
+    let permission_clone = permission_granted.clone();
+
+    nokhwa::nokhwa_initialize(move |granted| {
+      *permission_clone.lock().unwrap() = granted;
+      CAMERA_PERMISSION.store(granted, Ordering::SeqCst);
+      if granted {
+        println!("Camera permission granted");
+      } else {
+        println!("Camera permission denied");
+      }
+    });
+
+    // Wait for initialization to complete
+    std::thread::sleep(Duration::from_secs(1));
+
+    // Verify initialization
+    if nokhwa::nokhwa_check() {
+      println!("Nokhwa initialized successfully");
+    } else {
+      println!("Warning: Nokhwa initialization may not be complete");
+    }
+  }
+
+  #[cfg(not(target_os = "macos"))]
+  {
+    CAMERA_PERMISSION.store(true, Ordering::SeqCst);
+  }
+
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, trim_clip, save_recording, export_video, record_webcam_clip])
     .run(tauri::generate_context!())
