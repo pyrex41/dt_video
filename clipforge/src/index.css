@@ -1,8 +1,5 @@
 @import "plyr/dist/plyr.css";
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   --background: 0 0% 100%;
