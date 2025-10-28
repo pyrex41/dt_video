@@ -32,6 +32,7 @@ const app = Elm.Main.init({
 
 // Get video element reference
 let videoElement = null
+let mediaRecorder = null  // Store reference to current MediaRecorder
 
 // Helper to get video element
 function getVideoElement() {
@@ -204,7 +205,7 @@ app.ports.recordWebcam.subscribe(async (recordData) => {
 
 // Handle screen recording from Elm
 app.ports.recordScreen.subscribe(async () => {
-  console.log('Screen recording requested')
+  console.log('[ClipForge] Screen recording requested')
 
   // BROWSER API + TAURI INTEGRATION - ACTIVE:
   try {
@@ -220,6 +221,9 @@ app.ports.recordScreen.subscribe(async () => {
       mimeType: 'video/webm;codecs=vp8'
     })
 
+    // Store reference for manual stop
+    mediaRecorder = recorder
+
     const chunks = []
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) {
@@ -228,9 +232,13 @@ app.ports.recordScreen.subscribe(async () => {
     }
 
     recorder.onstop = async () => {
+      console.log('[ClipForge] Screen recording stopped')
       try {
         // Stop all tracks
         stream.getTracks().forEach(track => track.stop())
+
+        // Clear reference
+        mediaRecorder = null
 
         // Create blob
         const blob = new Blob(chunks, { type: 'video/webm' })
@@ -260,21 +268,39 @@ app.ports.recordScreen.subscribe(async () => {
         }
 
         app.ports.recordingComplete.send(clip)
-        alert(`Screen recording complete!\nSaved to: ${path}`)
+        console.log('[ClipForge] Screen recording complete, clip sent to Elm')
       } catch (error) {
-        console.error('Error saving screen recording:', error)
+        console.error('[ClipForge] Error saving screen recording:', error)
         alert(`Failed to save recording: ${error}`)
       }
     }
 
-    // Record for 10 seconds
+    // Record for 10 seconds (but can be stopped early)
     recorder.start()
-    setTimeout(() => recorder.stop(), 10000)
+    console.log('[ClipForge] Screen recording started')
 
-    alert('Screen recording started (10 seconds)...')
+    // Auto-stop after 10 seconds
+    setTimeout(() => {
+      if (recorder.state === 'recording') {
+        console.log('[ClipForge] Auto-stopping screen recording after 10 seconds')
+        recorder.stop()
+      }
+    }, 10000)
   } catch (error) {
-    console.error('Screen recording failed:', error)
+    console.error('[ClipForge] Screen recording failed:', error)
     alert(`Screen recording failed: ${error}`)
+  }
+})
+
+// Handle manual stop recording from Elm
+app.ports.stopRecording.subscribe(() => {
+  console.log('[ClipForge] Manual stop recording requested')
+
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop()
+    console.log('[ClipForge] MediaRecorder stopped manually')
+  } else {
+    console.log('[ClipForge] No active recording to stop')
   }
 })
 
