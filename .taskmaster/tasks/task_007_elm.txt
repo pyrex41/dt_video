@@ -1,0 +1,11 @@
+# Task ID: 7
+# Title: Implement trim functionality with drag handles
+# Status: pending
+# Dependencies: 2, 3, 5
+# Priority: high
+# Description: Add drag handles on clips for setting in/out points and invoke backend trim_clip command.
+# Details:
+In viewClip, add viewTrimHandles returning two green rects for start and end, with onDrag to UpdateClip with SetStart/SetEnd. Define port trimClip : { input : String, output : String, start : Float, end : Float } -> Cmd msg. On trim action, call trimClip with clip data.
+
+# Test Strategy:
+Drag trim handles on a clip; verify clip start/end updates; trigger trim and check backend command is invoked (mock or log).

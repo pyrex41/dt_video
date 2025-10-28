@@ -1,0 +1,64 @@
+{
+  "build": {
+    "beforeDevCommand": "pnpm run dev",
+    "beforeBuildCommand": "pnpm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist",
+    "withGlobalTauri": false
+  },
+  "package": {
+    "productName": "clipforge",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "fs": {
+        "all": true,
+        "scope": ["$APPDATA/**", "$RESOURCE/**", "$APPDATA/clips/**"]
+      },
+      "dialog": {
+        "open": true
+      },
+      "shell": {
+        "all": true,
+        "sidecar": true,
+        "scope": [
+          { "name": "ffmpeg", "sidecar": true, "args": true },
+          { "name": "ffprobe", "sidecar": true, "args": true }
+        ]
+      }
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.clipforge.dev",
+      "icon": [
+        "icons/32x32.png",
+        "icons/128x128.png",
+        "icons/128x128@2x.png",
+        "icons/icon.icns",
+        "icons/icon.ico"
+      ],
+      "externalBin": [
+        "binaries/ffmpeg",
+        "binaries/ffprobe"
+      ],
+      "macOS": {
+        "entitlements": "src-tauri/Entitlements.plist"
+      }
+    },
+    "security": {
+      "csp": "default-src 'self' blob: data: filesystem: tauri://localhost"
+    },
+    "windows": [
+      {
+        "fullscreen": false,
+        "resizable": true,
+        "title": "clipforge",
+        "width": 800,
+        "height": 600
+      }
+    ]
+  }
+}

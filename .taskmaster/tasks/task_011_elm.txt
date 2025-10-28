@@ -1,0 +1,43 @@
+# Task ID: 11
+# Title: Optimize performance for 30fps timeline and memory management
+# Status: pending
+# Dependencies: 2, 5, 6, 7, 8, 10
+# Priority: medium
+# Description: Ensure timeline renders at 30fps with 10+ clips, no memory leaks in 15-minute sessions, and responsive UI during export.
+# Details:
+Use requestAnimationFrame for smooth rendering. Implement virtual scrolling for large timelines. Profile memory usage, ensure no leaks by proper Elm state management. Optimize canvas drawing.
+
+# Test Strategy:
+Load 10+ clips; measure fps during playback; run 15-minute session and check memory; export while ensuring UI responsiveness. Performance testing should include all core MVP features: timeline (5), player (6), trim (7), export (8), and enhancements (10).
+
+# Subtasks:
+## 1. Implement requestAnimationFrame for smooth timeline rendering [pending]
+### Dependencies: None
+### Description: Integrate requestAnimationFrame to ensure the timeline renders smoothly at 30fps, especially with multiple clips.
+### Details:
+Modify the timeline rendering loop to use requestAnimationFrame instead of setInterval for better performance and synchronization with browser refresh rates. Update the Elm update function to handle animation frames properly.
+
+## 2. Implement virtual scrolling for large timelines [pending]
+### Dependencies: 11.1
+### Description: Add virtual scrolling to the timeline to handle large numbers of clips efficiently without rendering all at once.
+### Details:
+Extend the timeline view to only render visible clips based on the current scroll position and viewport size. Use Elm's Canvas API to clip and translate the drawing area for virtualized rendering.
+
+## 3. Profile and optimize memory usage to prevent leaks [pending]
+### Dependencies: 11.2
+### Description: Profile memory usage during long sessions and ensure no leaks occur through proper Elm state management.
+### Details:
+Use browser dev tools to profile memory during a 15-minute session with 10+ clips. Review Elm model updates to ensure old references are properly released, avoiding accumulation of unused data in the state.
+
+## 4. Optimize canvas drawing operations [pending]
+### Dependencies: 11.1, 11.2
+### Description: Enhance canvas drawing efficiency for better performance with multiple clips and tracks.
+### Details:
+Refactor canvas drawing code to batch operations, minimize redraws, and use efficient shapes. Optimize clip rendering by caching static elements and only updating dynamic parts like playhead and dragged clips.
+
+## 5. Ensure responsive UI during export operations [pending]
+### Dependencies: 11.3, 11.4
+### Description: Maintain UI responsiveness while exporting, preventing freezes or lag.
+### Details:
+Implement asynchronous export handling using Elm's Cmd and ports to run export in the background. Update UI progress without blocking the main thread, ensuring timeline interactions remain smooth during export.
+

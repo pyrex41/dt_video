@@ -1,0 +1,11 @@
+# Task ID: 3
+# Title: Implement basic app UI layout with Elm UI
+# Status: pending
+# Dependencies: 2
+# Priority: high
+# Description: Create the main UI layout including import button, timeline pane, and preview pane using standard Html module with Tailwind utility classes, ensuring responsive design for 800x600 minimum.
+# Details:
+In Main.elm, define the Model with initial state, Msg types for UI interactions, and update function following Elm Architecture. Use standard Html module to create a layout with Html.div and Html.Attributes.class for styling sections: import area, timeline canvas area, and preview video area. Apply Tailwind utility classes for responsive design (e.g., 'flex flex-col min-h-screen', 'grid grid-cols-2 gap-4', etc.). Implement view function to render the layout, for example: button [ class 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded' ] [ text 'Import Video' ].
+
+# Test Strategy:
+Run the app and check that the UI renders correctly on different screen sizes, with buttons and panes visible and responsive.
