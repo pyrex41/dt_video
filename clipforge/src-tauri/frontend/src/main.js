@@ -3,8 +3,8 @@ import { Elm } from './Main.elm'
 import { open } from '@tauri-apps/plugin-dialog'
 import { convertFileSrc } from '@tauri-apps/api/core'
 
-// Tauri backend integration (when available)
-// import { invoke } from '@tauri-apps/api/tauri'
+// Tauri backend integration
+import { invoke } from '@tauri-apps/api/core'
 
 /**
  * TAURI-ELM PORT BRIDGE
@@ -54,39 +54,34 @@ app.ports.requestImport.subscribe(async () => {
     })
 
     if (selected) {
-      // TAURI INTEGRATION POINT:
-      // When backend is ready, replace mock data with:
-      /*
-      const fileName = selected.split('/').pop() || selected.split('\\').pop()
-      const dest = `clips/${fileName}`
-      const metadataJson = await invoke('import_file', { path: selected, dest: dest })
-      const metadata = JSON.parse(metadataJson)
-      const clip = {
-        id: Date.now().toString(),
-        path: dest,
-        fileName: fileName,
-        duration: metadata.duration,
-        width: metadata.width,
-        height: metadata.height
+      // TAURI INTEGRATION - ACTIVE:
+      try {
+        const fileName = selected.split('/').pop() || selected.split('\\').pop()
+        const dest = `clips/${fileName}`
+        const metadataJson = await invoke('import_file', { path: selected, dest: dest })
+        const metadata = JSON.parse(metadataJson)
+
+        // Convert file path to Tauri asset URL
+        const assetUrl = convertFileSrc(dest)
+
+        const clip = {
+          id: Date.now().toString(),
+          path: assetUrl,  // Use Tauri asset URL for video player
+          fileName: fileName,
+          duration: metadata.duration,
+          width: metadata.width,
+          height: metadata.height
+        }
+
+        // Send clip data back to Elm
+        app.ports.clipImported.send(clip)
+
+        // Reset video element reference when new video is loaded
+        videoElement = null
+      } catch (error) {
+        console.error('Error importing file:', error)
+        alert(`Import failed: ${error}`)
       }
-      */
-
-      // MOCK IMPLEMENTATION (current):
-      const fileName = selected.split('/').pop() || selected.split('\\').pop()
-      const clip = {
-        id: Date.now().toString(),
-        path: selected,
-        fileName: fileName,
-        duration: 60.0,  // Mock duration (will be replaced with FFmpeg data)
-        width: 1920,     // Mock width
-        height: 1080     // Mock height
-      }
-
-      // Send clip data back to Elm
-      app.ports.clipImported.send(clip)
-
-      // Reset video element reference when new video is loaded
-      videoElement = null
     }
   } catch (error) {
     console.error('Error opening file dialog:', error)
@@ -121,9 +116,7 @@ app.ports.pauseVideo.subscribe(() => {
 app.ports.trimClip.subscribe(async (trimData) => {
   console.log('Trim clip requested:', trimData)
 
-  // TAURI INTEGRATION POINT:
-  // When backend is ready, replace alert with:
-  /*
+  // TAURI INTEGRATION - ACTIVE:
   try {
     await invoke('trim_clip', {
       input: trimData.input,
@@ -131,25 +124,18 @@ app.ports.trimClip.subscribe(async (trimData) => {
       start: trimData.start,
       end: trimData.end
     })
-    // Notify Elm of success via a port if needed
     alert(`Trim complete!\nOutput: ${trimData.output}`)
   } catch (error) {
     console.error('Trim failed:', error)
     alert(`Trim failed: ${error}`)
   }
-  */
-
-  // MOCK IMPLEMENTATION (current):
-  alert(`Trim requested:\nInput: ${trimData.input}\nOutput: ${trimData.output}\nStart: ${trimData.start}s\nEnd: ${trimData.end}s`)
 })
 
 // Handle export video command from Elm
 app.ports.exportVideo.subscribe(async (exportData) => {
   console.log('Export video requested:', exportData)
 
-  // TAURI INTEGRATION POINT:
-  // When backend is ready, replace simulation with:
-  /*
+  // TAURI INTEGRATION - ACTIVE:
   try {
     // Parse resolution (e.g., "720p" → "1280x720")
     const resolutionMap = {
@@ -158,6 +144,10 @@ app.ports.exportVideo.subscribe(async (exportData) => {
     }
     const resolution = resolutionMap[exportData.resolution] || '1280x720'
 
+    // TODO: Implement progress tracking via Tauri events
+    // For now, show initial progress
+    app.ports.exportProgress.send(0)
+
     // Call backend (this is async, but FFmpeg progress would need event streaming)
     await invoke('export_video', {
       inputs: exportData.inputs,
@@ -165,41 +155,20 @@ app.ports.exportVideo.subscribe(async (exportData) => {
       resolution: resolution
     })
 
-    // For progress, you'd need to:
-    // 1. Listen to Tauri events from backend
-    // 2. Parse FFmpeg stderr output for progress
-    // 3. Send updates via app.ports.exportProgress.send(percentage)
-
+    // Mark as complete
     app.ports.exportProgress.send(100)
     alert(`Export complete!\nOutput: ${exportData.output}`)
   } catch (error) {
     console.error('Export failed:', error)
     alert(`Export failed: ${error}`)
   }
-  */
-
-  // MOCK IMPLEMENTATION (current):
-  let progress = 0
-  const interval = setInterval(() => {
-    progress += 10
-    app.ports.exportProgress.send(progress)
-
-    if (progress >= 100) {
-      clearInterval(interval)
-      setTimeout(() => {
-        alert(`Export complete!\nOutput: ${exportData.output}\nResolution: ${exportData.resolution}`)
-      }, 500)
-    }
-  }, 500) // Update every 500ms
 })
 
 // Handle webcam recording from Elm
 app.ports.recordWebcam.subscribe(async (recordData) => {
   console.log('Webcam recording requested:', recordData)
 
-  // TAURI INTEGRATION POINT:
-  // When backend is ready, replace simulation with:
-  /*
+  // TAURI INTEGRATION - ACTIVE:
   try {
     const outputPath = await invoke('record_webcam_clip', {
       output: recordData.output,
@@ -213,9 +182,12 @@ app.ports.recordWebcam.subscribe(async (recordData) => {
     })
     const metadata = JSON.parse(metadataJson)
 
+    // Convert file path to Tauri asset URL
+    const assetUrl = convertFileSrc(outputPath)
+
     const clip = {
       id: Date.now().toString(),
-      path: outputPath,
+      path: assetUrl,
       fileName: recordData.output,
       duration: metadata.duration,
       width: metadata.width,
@@ -228,30 +200,13 @@ app.ports.recordWebcam.subscribe(async (recordData) => {
     console.error('Webcam recording failed:', error)
     alert(`Webcam recording failed: ${error}`)
   }
-  */
-
-  // MOCK IMPLEMENTATION (current):
-  setTimeout(() => {
-    const mockClip = {
-      id: Date.now().toString(),
-      path: recordData.output,
-      fileName: recordData.output,
-      duration: recordData.duration,
-      width: 1280,
-      height: 720
-    }
-    app.ports.recordingComplete.send(mockClip)
-    alert(`Webcam recording complete!\nDuration: ${recordData.duration}s\nSaved to: ${recordData.output}`)
-  }, 2000) // Simulate 2 second delay
 })
 
 // Handle screen recording from Elm
 app.ports.recordScreen.subscribe(async () => {
   console.log('Screen recording requested')
 
-  // BROWSER API IMPLEMENTATION (recommended approach from prd-integration-reference.md):
-  // Screen recording uses browser's MediaRecorder API, then saves via Tauri
-  /*
+  // BROWSER API + TAURI INTEGRATION - ACTIVE:
   try {
     // Request screen capture
     const stream = await navigator.mediaDevices.getDisplayMedia({
@@ -273,35 +228,43 @@ app.ports.recordScreen.subscribe(async () => {
     }
 
     recorder.onstop = async () => {
-      // Stop all tracks
-      stream.getTracks().forEach(track => track.stop())
+      try {
+        // Stop all tracks
+        stream.getTracks().forEach(track => track.stop())
 
-      // Create blob
-      const blob = new Blob(chunks, { type: 'video/webm' })
-      const arrayBuffer = await blob.arrayBuffer()
-      const data = Array.from(new Uint8Array(arrayBuffer))
+        // Create blob
+        const blob = new Blob(chunks, { type: 'video/webm' })
+        const arrayBuffer = await blob.arrayBuffer()
+        const data = Array.from(new Uint8Array(arrayBuffer))
 
-      const fileName = `screen_recording_${Date.now()}.webm`
-      const path = `clips/${fileName}`
+        const fileName = `screen_recording_${Date.now()}.webm`
+        const path = `clips/${fileName}`
 
-      // Save via Tauri backend
-      await invoke('save_recording', { path, data })
+        // Save via Tauri backend
+        await invoke('save_recording', { path, data })
 
-      // Get metadata
-      const metadataJson = await invoke('import_file', { path, dest: path })
-      const metadata = JSON.parse(metadataJson)
+        // Get metadata
+        const metadataJson = await invoke('import_file', { path, dest: path })
+        const metadata = JSON.parse(metadataJson)
 
-      const clip = {
-        id: Date.now().toString(),
-        path: path,
-        fileName: fileName,
-        duration: metadata.duration,
-        width: metadata.width,
-        height: metadata.height
+        // Convert file path to Tauri asset URL
+        const assetUrl = convertFileSrc(path)
+
+        const clip = {
+          id: Date.now().toString(),
+          path: assetUrl,
+          fileName: fileName,
+          duration: metadata.duration,
+          width: metadata.width,
+          height: metadata.height
+        }
+
+        app.ports.recordingComplete.send(clip)
+        alert(`Screen recording complete!\nSaved to: ${path}`)
+      } catch (error) {
+        console.error('Error saving screen recording:', error)
+        alert(`Failed to save recording: ${error}`)
       }
-
-      app.ports.recordingComplete.send(clip)
-      alert(`Screen recording complete!\nSaved to: ${path}`)
     }
 
     // Record for 10 seconds
@@ -313,21 +276,6 @@ app.ports.recordScreen.subscribe(async () => {
     console.error('Screen recording failed:', error)
     alert(`Screen recording failed: ${error}`)
   }
-  */
-
-  // MOCK IMPLEMENTATION (current):
-  setTimeout(() => {
-    const mockClip = {
-      id: Date.now().toString(),
-      path: `screen_recording_${Date.now()}.webm`,
-      fileName: `screen_recording_${Date.now()}.webm`,
-      duration: 10,
-      width: 1920,
-      height: 1080
-    }
-    app.ports.recordingComplete.send(mockClip)
-    alert(`Screen recording complete!\nSaved to: ${mockClip.fileName}`)
-  }, 2000) // Simulate 2 second delay
 })
 
 // Listen for video time updates and send to Elm

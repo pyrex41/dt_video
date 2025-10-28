@@ -6,7 +6,7 @@ export default defineConfig({
   // Tauri-specific config if needed
   clearScreen: false,
   server: {
-    port: 1420,
+    port: 5173,
     strictPort: true,
   },
   envPrefix: ['VITE_', 'TAURI_'],
