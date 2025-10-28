@@ -19,7 +19,7 @@ export function RecordButton() {
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: false,
+        audio: true,
       })
 
       const recorder = new MediaRecorder(stream, {
@@ -85,6 +85,7 @@ export function RecordButton() {
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { mediaSource: "screen" } as MediaTrackConstraints,
+        audio: true,
       })
 
       const recorder = new MediaRecorder(stream, {

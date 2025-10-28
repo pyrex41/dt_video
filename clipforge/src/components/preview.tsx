@@ -13,7 +13,12 @@ export function Preview() {
   const currentClip = clips.find((clip) => playhead >= clip.start && playhead < clip.end)
 
   useEffect(() => {
-    if (!videoRef.current) return
+    if (!videoRef.current || !currentClip) return
+
+    // Destroy existing player if it exists
+    if (playerRef.current) {
+      playerRef.current.destroy()
+    }
 
     playerRef.current = new Plyr(videoRef.current, {
       controls: ["play", "progress", "current-time", "mute", "volume", "fullscreen"],
@@ -33,9 +38,11 @@ export function Preview() {
     player.on("pause", () => setIsPlaying(false))
 
     return () => {
-      player.destroy()
+      if (playerRef.current) {
+        playerRef.current.destroy()
+      }
     }
-  }, [])
+  }, [currentClip])
 
   useEffect(() => {
     if (!playerRef.current || !currentClip) return
@@ -57,11 +64,13 @@ export function Preview() {
   return (
     <div className="flex flex-1 items-center justify-center bg-muted p-4">
       {currentClip ? (
-        <video
-          ref={videoRef}
-          src={convertFileSrc(currentClip.path)}
-          className="max-h-full max-w-full"
-        />
+        <div className="w-full h-full flex items-center justify-center">
+          <video
+            ref={videoRef}
+            src={convertFileSrc(currentClip.path)}
+            className="max-h-full max-w-full"
+          />
+        </div>
       ) : (
         <div className="text-center text-muted-foreground">
           <p className="text-lg">No clip selected</p>
