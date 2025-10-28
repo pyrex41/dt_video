@@ -12,7 +12,11 @@
   },
   "tauri": {
     "allowlist": {
-      "all": true
+      "all": true,
+      "protocol": {
+        "asset": true,
+        "assetScope": ["$APPDATA/clips/**"]
+      }
     },
     "bundle": {
       "active": true,
@@ -34,7 +38,7 @@
       }
     },
     "security": {
-      "csp": "default-src 'self' blob: data: filesystem: http://tauri.localhost"
+      "csp": "default-src 'self' blob: data: filesystem: http://tauri.localhost asset: tauri:"
     },
     "windows": [
       {
