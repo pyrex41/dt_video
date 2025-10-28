@@ -1,0 +1,43 @@
+# Task ID: 5
+# Title: Implement elm-canvas timeline with draggable clips and playhead
+# Status: pending
+# Dependencies: 2, 3, 4
+# Priority: high
+# Description: Build a single-track timeline using elm-canvas, with draggable clip shapes and a movable playhead line.
+# Details:
+Extend Model to include clips list and playhead float. Add Msg for UpdateClip and SetPlayhead. In viewTimeline, use Canvas.toHtml to render shapes: map viewClip for each clip (rect filled blue, onDrag to UpdateClip), and viewPlayhead (line stroked red). Implement updateClip function to handle drag updates. Ensure virtualized rendering by only drawing visible clips.
+
+# Test Strategy:
+Add a clip and verify it appears as a blue rectangle; drag the clip and check position updates; drag playhead and confirm it moves.
+
+# Subtasks:
+## 1. Extend Model to include clips list and playhead position [pending]
+### Dependencies: None
+### Description: Update the Elm Model type to include a list of clips and a float for the playhead position.
+### Details:
+Add fields to the Model record: clips as List Clip and playhead as Float. Ensure Clip type alias is defined with necessary fields like id, start, end, etc., if not already present.
+
+## 2. Add Msg types for UpdateClip and SetPlayhead [pending]
+### Dependencies: 5.1
+### Description: Introduce new Msg constructors for handling clip updates and playhead movements.
+### Details:
+Add UpdateClip : ClipId -> Position -> Msg and SetPlayhead : Float -> Msg to the Msg type. Define ClipId as an alias for Int or similar, and Position as a record with x and y floats.
+
+## 3. Implement viewClip function for draggable clip rendering [pending]
+### Dependencies: 5.1, 5.2
+### Description: Create a viewClip function that renders each clip as a blue filled rectangle with drag functionality.
+### Details:
+Define viewClip : Clip -> Html Msg that uses Canvas.rect to draw a blue filled rectangle at the clip's position, and attach onDrag to send UpdateClip messages. Ensure the rectangle size reflects clip duration.
+
+## 4. Implement viewPlayhead function for movable playhead line [pending]
+### Dependencies: 5.1, 5.2
+### Description: Create a viewPlayhead function that renders a red stroked line representing the playhead.
+### Details:
+Define viewPlayhead : Float -> Html Msg that uses Canvas.line to draw a vertical red line at the playhead position, and attach onDrag to send SetPlayhead messages for horizontal movement.
+
+## 5. Implement updateClip function and virtualized rendering [pending]
+### Dependencies: 5.1, 5.2, 5.3, 5.4
+### Description: Add updateClip logic to handle drag updates and ensure only visible clips are rendered.
+### Details:
+Implement updateClip in the update function to modify clip positions based on drag deltas. In viewTimeline, filter clips to only those visible in the current viewport before mapping viewClip, to achieve virtualization.
+

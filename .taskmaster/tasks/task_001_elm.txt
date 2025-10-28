@@ -1,0 +1,11 @@
+# Task ID: 1
+# Title: Setup Elm Project and Dependencies
+# Status: cancelled
+# Dependencies: None
+# Priority: high
+# Description: Configure Vite with vite-plugin-elm and install required Elm packages including elm-canvas and @tauri-apps/api. Set up Tailwind CSS for styling.
+# Details:
+Run the setup commands: cd clipforge/src-tauri/frontend; pnpm add -D vite-plugin-elm; elm install elm/canvas; pnpm add @tauri-apps/api; pnpm add -D tailwindcss postcss autoprefixer && npx tailwindcss init -p. Update vite.config.js to include elmPlugin() in plugins array. Configure tailwind.config.js to scan Elm files with content: ['./src/**/*.elm', './index.html']. Create src/index.css with Tailwind directives: @tailwind base; @tailwind components; @tailwind utilities; Import index.css in main.js before importing Elm.Main. Ensure Elm v0.19 is used. Set up the basic Elm Architecture with Model, Msg, and update function as provided in the PRD.
+
+# Test Strategy:
+Verify that Vite builds successfully with Elm files by running pnpm run build and checking for successful compilation without errors. Confirm Tailwind CSS is properly integrated by checking that styles are applied in the Elm components.

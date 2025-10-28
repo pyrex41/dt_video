@@ -1,9 +1,9 @@
 {
   "build": {
-    "beforeDevCommand": "cd .. && pnpm run dev",
-    "beforeBuildCommand": "cd .. && pnpm run build",
-    "devPath": "http://localhost:1420",
-    "distDir": "../dist",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "cd frontend && pnpm run build",
+    "devPath": "http://localhost:5173",
+    "distDir": "../frontend/dist",
     "withGlobalTauri": false
   },
   "package": {
@@ -44,7 +44,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "ClipForge (React)",
+        "title": "ClipForge (Elm)",
         "width": 800,
         "height": 600
       }

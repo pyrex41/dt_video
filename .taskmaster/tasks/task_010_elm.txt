@@ -1,0 +1,43 @@
+# Task ID: 10
+# Title: Enhance timeline to two tracks with split, zoom, and snap-to-grid
+# Status: pending
+# Dependencies: 2, 3, 5
+# Priority: medium
+# Description: Upgrade timeline to two tracks, add clip splitting at playhead, zoom in/out, and snap-to-grid for drags.
+# Details:
+Extend timeline to render two tracks (main and PiP). Add Msg for SplitClip, ZoomIn/Out. Implement snap logic in drag handlers. For zoom, scale canvas. Split by creating two clips at playhead.
+
+# Test Strategy:
+Add clips to both tracks; test splitting at playhead; verify zoom scales timeline; check snap-to-grid during drags.
+
+# Subtasks:
+## 1. Extend timeline rendering to support two tracks [pending]
+### Dependencies: None
+### Description: Modify the timeline view to render two separate tracks: a main track and a Picture-in-Picture (PiP) track, allowing clips to be placed on either track.
+### Details:
+Update the viewTimeline function to draw two horizontal tracks on the canvas. Assign clips to tracks based on a new track field in the Clip type. Ensure proper spacing and labeling for main and PiP tracks.
+
+## 2. Add SplitClip message and handler [pending]
+### Dependencies: 10.1
+### Description: Introduce a new Msg type for SplitClip to handle splitting a clip at the current playhead position.
+### Details:
+Extend the Msg union type to include SplitClip with parameters for the clip ID and playhead position. Add a corresponding update case in the update function to process the split action.
+
+## 3. Implement clip splitting logic at playhead [pending]
+### Dependencies: 10.2
+### Description: Create logic to split a selected clip into two separate clips at the playhead position, adjusting their start and end times accordingly.
+### Details:
+In the SplitClip handler, find the clip by ID, calculate the split point based on playhead, create two new clips (one before and one after the playhead), and replace the original clip in the model with these two.
+
+## 4. Add ZoomIn and ZoomOut messages and canvas scaling [pending]
+### Dependencies: 10.1
+### Description: Implement Msg types for ZoomIn and ZoomOut, and apply canvas scaling to zoom the timeline in and out.
+### Details:
+Add ZoomIn and ZoomOut to the Msg union. In the update function, adjust a zoom factor in the model. In viewTimeline, apply Canvas.scale to the entire timeline drawing based on the zoom factor, ensuring clips and playhead scale appropriately.
+
+## 5. Implement snap-to-grid logic in drag handlers [pending]
+### Dependencies: 10.1
+### Description: Add snapping functionality so that when dragging clips, they align to a predefined grid for precise positioning.
+### Details:
+Define a grid size (e.g., in seconds or pixels). In the drag handlers for UpdateClip, modify the position updates to snap to the nearest grid point by rounding the dragged position to the grid. Ensure this applies to both tracks.
+

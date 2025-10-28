@@ -1,0 +1,43 @@
+# Task ID: 6
+# Title: Implement custom video preview player
+# Status: pending
+# Dependencies: 2, 3, 5
+# Priority: high
+# Description: Create a custom Elm video player synced with the timeline playhead, including play/pause controls and scrubbing.
+# Details:
+Add Html.video element in viewPreview with src from first clip's path, controls True. Use port setVideoTime : Float -> Cmd msg to sync video time with playhead. Add Msg for Play, Pause, Scrub. In update, call setVideoTime when playhead changes. Handle video events via ports for playhead updates.
+
+# Test Strategy:
+Import a video, play it; verify video syncs with playhead drag; test play/pause buttons and scrubbing functionality.
+
+# Subtasks:
+## 1. Define Msg types for video controls [pending]
+### Dependencies: None
+### Description: Add Msg constructors for Play, Pause, and Scrub to handle user interactions with the video player.
+### Details:
+In the Elm module, update the Msg type to include Play, Pause, and Scrub variants. Play and Pause should be simple constructors, while Scrub might take a Float for the new time position.
+
+## 2. Define port for setting video time [pending]
+### Dependencies: None
+### Description: Create a port to communicate with JavaScript for setting the video element's current time.
+### Details:
+Add a port declaration: port setVideoTime : Float -> Cmd msg. This port will be used to sync the video playback with the timeline playhead position.
+
+## 3. Add Html.video element to viewPreview [pending]
+### Dependencies: None
+### Description: Integrate an HTML video element into the viewPreview function with source from the first clip's path and enable controls.
+### Details:
+In the viewPreview function, add Html.video [ Html.Attributes.src (getClipPath firstClip), Html.Attributes.controls True ] []. Ensure the video element is properly styled and positioned in the UI.
+
+## 4. Implement playhead synchronization in update [pending]
+### Dependencies: None
+### Description: Modify the update function to call setVideoTime whenever the playhead position changes.
+### Details:
+In the update function, when handling messages that update the playhead (e.g., timeline scrubbing), include a command to call setVideoTime with the new playhead time. Ensure this syncs the video playback accurately.
+
+## 5. Handle video events via ports for playhead updates [pending]
+### Dependencies: None
+### Description: Set up ports to receive video events and update the playhead accordingly.
+### Details:
+Define incoming ports for video events like onTimeUpdate or onPlay. In the update function, handle these port messages to update the model’s playhead position, ensuring bidirectional sync between video and timeline.
+
