@@ -1,0 +1,8 @@
+# Ignore FFmpeg binary files
+ffmpeg-*
+ffprobe-*
+
+# Keep documentation and scripts
+!README.md
+!download.sh
+!.gitignore
