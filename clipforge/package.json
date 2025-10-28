@@ -7,7 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "use-react": "cp src-tauri/tauri.conf.react.json src-tauri/tauri.conf.json && echo 'Switched to React frontend (port 1420)'",
+    "use-elm": "cp src-tauri/tauri.conf.elm.json src-tauri/tauri.conf.json && echo 'Switched to Elm frontend (port 5173)'",
+    "dev:elm": "cd src-tauri/frontend && pnpm run dev",
+    "tauri:elm": "pnpm run use-elm && pnpm run tauri dev",
+    "tauri:react": "pnpm run use-react && pnpm run tauri dev"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",
