@@ -31,15 +31,30 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
-      - name: Install dependencies
-        working-directory: ./clipforge
-        run: pnpm install
+       - name: Install dependencies
+         working-directory: ./clipforge
+         run: pnpm install
 
-      - name: Download FFmpeg binaries
-        working-directory: ./clipforge/src-tauri/binaries
-        run: ./download.sh
+       - name: Cache FFmpeg binaries
+         uses: actions/cache@v4
+         id: ffmpeg-cache
+         with:
+           path: clipforge/src-tauri/binaries/ffmpeg*
+           key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-v6.1
 
-      - name: Build for macOS ARM64
+       - name: Download FFmpeg binaries
+         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+         working-directory: ./clipforge/src-tauri/binaries
+         run: ./download.sh
+
+       - name: Verify FFmpeg binaries
+         working-directory: ./clipforge/src-tauri/binaries
+         run: |
+           if [[ "$RUNNER_OS" == "macOS" ]]; then
+             ./ffmpeg-aarch64-apple-darwin -version || exit 1
+           fi
+
+       - name: Build for macOS ARM64
         working-directory: ./clipforge
         run: pnpm run build:mac
 
@@ -79,15 +94,30 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
-      - name: Install dependencies
-        working-directory: ./clipforge
-        run: pnpm install
+       - name: Install dependencies
+         working-directory: ./clipforge
+         run: pnpm install
 
-      - name: Download FFmpeg binaries
-        working-directory: ./clipforge/src-tauri/binaries
-        run: ./download.sh
+       - name: Cache FFmpeg binaries
+         uses: actions/cache@v4
+         id: ffmpeg-cache
+         with:
+           path: clipforge/src-tauri/binaries/ffmpeg*
+           key: ffmpeg-${{ runner.os }}-${{ runner.arch }}-v6.1
 
-      - name: Build for Windows
+       - name: Download FFmpeg binaries
+         if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
+         working-directory: ./clipforge/src-tauri/binaries
+         run: ./download.sh
+
+       - name: Verify FFmpeg binaries
+         working-directory: ./clipforge/src-tauri/binaries
+         run: |
+           if [[ "$RUNNER_OS" == "Windows" ]]; then
+             ./ffmpeg-x86_64-pc-windows-msvc.exe -version || exit 1
+           fi
+
+       - name: Build for Windows
         working-directory: ./clipforge
         run: pnpm run build:win
 

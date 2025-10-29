@@ -45,6 +45,68 @@ sudo apt install ffmpeg
 sudo pacman -S ffmpeg
 ```
 
+### FFmpeg Integration
+
+ClipForge includes a comprehensive FFmpeg builder utility (`src-tauri/src/utils/ffmpeg.rs`) that centralizes all video processing operations:
+
+#### Key Features
+
+- **Fluent Builder API**: Chain methods for building complex FFmpeg commands
+- **Centralized Operations**: All FFmpeg usage now goes through the builder for consistency
+- **Automatic Binary Management**: Binaries are downloaded and cached during CI/CD builds
+- **Cross-Platform Support**: Supports macOS ARM64, macOS x64, Windows x64, and Linux x64
+- **Progress Monitoring**: Real-time progress updates for long-running operations via Tauri events
+- **Comprehensive Error Handling**: Detailed error types with user-friendly messages
+
+#### Supported Operations
+
+- **Video Trimming**: Precise start/duration trimming with seek optimization
+- **Format Conversion**: WebM→MP4 with automatic dimension adjustment for MP4 compatibility
+- **Thumbnail Generation**: Extract thumbnails at specific timestamps with scaling
+- **Multi-Clip Concatenation**: Combine multiple clips using FFmpeg concat demuxer
+- **Raw Video Encoding**: Process raw RGB frames from webcam capture
+- **Stream Copy**: Fast operations without re-encoding when possible
+
+#### Builder Usage Examples
+
+```rust
+use utils::ffmpeg::FfmpegBuilder;
+
+// Basic video trimming
+let result = FfmpegBuilder::new()
+    .input("input.mp4")
+    .trim(10.0, 5.0)  // Start at 10s, duration 5s
+    .output("output.mp4")
+    .run(&app_handle);
+
+// Thumbnail extraction with progress
+let result = FfmpegBuilder::new()
+    .input("video.mp4")
+    .thumbnail(15.0)  // Extract at 15 seconds
+    .scale(320, Some(180))
+    .output("thumbnail.jpg")
+    .run_with_progress(&app_handle, None)
+    .await;
+
+// Multi-clip concatenation
+let result = FfmpegBuilder::new()
+    .concat("clips.txt")  // FFmpeg concat file
+    .stream_copy()        // Fast concatenation
+    .output("final.mp4")
+    .run_with_progress(&app_handle, Some(total_duration))
+    .await;
+```
+
+#### Binary Management
+
+FFmpeg binaries are automatically managed via `src-tauri/binaries/download.sh`:
+- Downloads platform-specific binaries with checksum verification
+- Supports version pinning for reproducible builds
+- Integrated with GitHub Actions CI/CD for caching
+- Automatic manifest generation for dependency tracking
+
+The builder automatically falls back to system FFmpeg if bundled binaries are unavailable.
+
 ### Installing Rust
 
 ```bash
@@ -327,6 +389,27 @@ Common Tauri issues:
 - Maintain consistent Tailwind class naming
 - Write unit tests for new features
 - Document complex logic with comments
+
+### Testing
+
+#### Running Tests
+```bash
+# Run all tests (Rust backend)
+cd clipforge/src-tauri
+cargo test
+
+# Run with verbose output
+cargo test -- --nocapture
+```
+
+#### Test Coverage
+- **Unit Tests**: FFmpeg builder argument construction, error handling
+- **Integration Tests**: End-to-end video processing workflows
+- **Mock Dependencies**: Tauri AppHandle, external binaries
+
+Test files are located in:
+- `src-tauri/tests/` - Integration tests
+- Inline unit tests in source files
 
 ### Pull Request Guidelines
 

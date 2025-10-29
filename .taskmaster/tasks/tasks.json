@@ -1868,7 +1868,7 @@
             "title": "Wire up Cancel/Abort export end‑to‑end",
             "description": "Connect UI Cancel to backend to terminate the FFmpeg child process, emit a terminal event, and clean up partial files across macOS/Windows/Linux.",
             "dependencies": [],
-            "details": "Implement a Tauri command/event to request cancellation; track child PID/handle; ensure idempotent termination and proper resource cleanup.",
+            "details": "Implement a Tauri command/event to request cancellation; track child PID/handle; ensure idempotent termination and proper resource cleanup.\n<info added on 2025-10-29T18:36:04.718Z>\nCentralized FFmpeg invocation via FfmpegBuilder, which parses stderr for time updates and forwards them as Tauri progress events. Wired cancel end-to-end: the UI cancel command now terminates the active ffmpeg process, stops progress emission, cleans up partial output files, and emits a terminal cancellation event. Verified graceful shutdown and resource cleanup.\n</info added on 2025-10-29T18:36:04.718Z>",
             "status": "done",
             "testStrategy": "Manual + automated: trigger cancel mid‑encode, assert process exit, no zombies, partial file removed, and UI resets."
           },

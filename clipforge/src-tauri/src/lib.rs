@@ -1,18 +1,15 @@
-use tauri::Manager;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 use std::io::Write;
-use std::process::Stdio;
-use tokio::process::Command;
-use tokio::io::{AsyncBufReadExt, BufReader as AsyncBufReader};
-use regex::Regex;
 use tauri::api::process::Command as TauriCommand;
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+pub mod utils;
 
 static CAMERA_PERMISSION: AtomicBool = AtomicBool::new(false);
 
@@ -57,17 +54,11 @@ struct ClipInfo {
 }
 
 #[tauri::command]
-async fn check_ffmpeg() -> Result<String, String> {
-    let output = TauriCommand::new_sidecar("ffmpeg")
-        .expect("failed to create ffmpeg command")
-        .args(&["-version"])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if output.status.success() {
-        Ok(output.stdout)
-    } else {
-        Err("FFmpeg not found. Install via: brew install ffmpeg (macOS) or download from ffmpeg.org (Windows)".to_string())
+fn check_ffmpeg() -> Result<String, String> {
+    // Use sync version for simple version check
+    match utils::ffmpeg::FfmpegBuilder::version_check().run_version_check() {
+        Ok(output) => Ok(output),
+        Err(_) => Err("FFmpeg not found. Install via: brew install ffmpeg (macOS) or download from ffmpeg.org (Windows)".to_string()),
     }
 }
 
@@ -166,7 +157,7 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
         .to_string();
 
     // Generate thumbnail automatically
-    let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), app_handle).await {
+    let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), app_handle) {
         Ok(path) => Some(path),
         Err(e) => {
             eprintln!("Warning: Failed to generate thumbnail: {}", e);
@@ -189,7 +180,7 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
 }
 
 #[tauri::command]
-async fn generate_thumbnail(
+fn generate_thumbnail(
     file_path: String,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
@@ -215,28 +206,20 @@ async fn generate_thumbnail(
     let thumbnail_name = format!("{}_thumb.jpg", file_name);
     let thumbnail_path = thumbnails_dir.join(&thumbnail_name);
 
-    // Use FFmpeg to extract frame at 1 second
-    let output = TauriCommand::new_sidecar("ffmpeg")
-        .expect("failed to create ffmpeg command")
-        .args(&[
-            "-i", &file_path,
-            "-ss", "00:00:01",
-            "-vframes", "1",
-            "-vf", "scale=320:-1",  // Scale width to 320px, maintain aspect ratio
-            "-y",  // Overwrite output file if it exists
-            thumbnail_path.to_str().ok_or("Invalid thumbnail path")?,
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+    // Use builder for thumbnail generation (sync since it's quick)
+    let result = utils::ffmpeg::FfmpegBuilder::new()
+        .input(&file_path)
+        .thumbnail(1.0)
+        .scale(320, None)
+        .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
+        .run_sync();
 
-    if !output.status.success() {
-        return Err(format!("FFmpeg thumbnail generation failed: {}", output.stderr));
+    match result {
+        Ok(_) => Ok(thumbnail_path.to_str()
+            .ok_or("Invalid thumbnail path")?
+            .to_string()),
+        Err(e) => Err(e.to_string()),
     }
-
-    // Return the thumbnail path
-    Ok(thumbnail_path.to_str()
-        .ok_or("Invalid thumbnail path")?
-        .to_string())
 }
 
 #[tauri::command]
@@ -245,6 +228,7 @@ async fn trim_clip(
     output_path: String,
     start_time: f64,
     end_time: f64,
+    app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Validate input file exists
     let input = Path::new(&input_path);
@@ -270,32 +254,18 @@ async fn trim_clip(
     // Calculate duration for FFmpeg
     let duration = end_time - start_time;
 
-    // Run FFmpeg trim command with stream copy (fast, no re-encoding)
-    let output = TauriCommand::new_sidecar("ffmpeg")
-        .expect("failed to create ffmpeg command")
-        .args(&[
-            "-ss", &start_time.to_string(),
-            "-i", &input_path,
-            "-t", &duration.to_string(),
-            "-c", "copy",
-            "-avoid_negative_ts", "make_zero",
-            "-y", // Overwrite output file
-            &output_path
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+    // Use builder for trim operation
+    let result = utils::ffmpeg::FfmpegBuilder::new()
+        .input(&input_path)
+        .trim(start_time, duration)
+        .stream_copy()
+        .output(&output_path)
+        .run(&app_handle);
 
-    if !output.status.success() {
-        return Err(format!("FFmpeg trim failed: {}", output.stderr));
+    match result {
+        Ok(_) => Ok(output_path),
+        Err(e) => Err(e.to_string()),
     }
-
-    // Verify output file was created
-    let output_file = Path::new(&output_path);
-    if !output_file.exists() {
-        return Err("Output file was not created".to_string());
-    }
-
-    Ok(output_path)
 }
 
 #[tauri::command]
@@ -332,36 +302,27 @@ async fn save_recording(
         let mp4_filename = file_name.replace(".webm", ".mp4");
         let mp4_path = clips_dir.join(&mp4_filename);
 
-        // Run FFmpeg conversion with optimized settings for playback
-        let output = TauriCommand::new_sidecar("ffmpeg")
-            .expect("failed to create ffmpeg command")
-            .args(&[
-                "-i", webm_path.to_str().ok_or("Invalid WebM path")?,
-                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",  // Ensure even dimensions
-                "-c:v", "libx264",
-                "-preset", "fast",          // Faster encoding
-                "-crf", "23",               // Good quality/size balance
-                "-movflags", "+faststart",  // Enable streaming/fast playback
-                "-c:a", "aac",
-                "-b:a", "128k",             // Audio bitrate
-                "-strict", "experimental",
-                "-y",                       // Overwrite output
-                mp4_path.to_str().ok_or("Invalid MP4 path")?,
-            ])
-            .output()
-            .map_err(|e| format!("Failed to run FFmpeg conversion: {}", e))?;
+        // Use builder for MP4 conversion
+        let result = utils::ffmpeg::FfmpegBuilder::new()
+            .input(webm_path.to_str().ok_or("Invalid WebM path")?)
+            .scale_even()
+            .encode()
+            .preset("fast")
+            .output(mp4_path.to_str().ok_or("Invalid MP4 path")?)
+            .run(&app_handle);
 
-        if !output.status.success() {
-            return Err(format!("FFmpeg conversion failed: {}", output.stderr));
+        match result {
+            Ok(_) => {
+                // Delete original WebM file after successful conversion
+                fs::remove_file(&webm_path)
+                    .map_err(|e| format!("Failed to remove WebM file: {}", e))?;
+
+                Ok(mp4_path.to_str()
+                    .ok_or("Invalid MP4 path")?
+                    .to_string())
+            }
+            Err(e) => Err(e.to_string()),
         }
-
-        // Delete original WebM file after successful conversion
-        fs::remove_file(&webm_path)
-            .map_err(|e| format!("Failed to remove WebM file: {}", e))?;
-
-        Ok(mp4_path.to_str()
-            .ok_or("Invalid MP4 path")?
-            .to_string())
     } else {
         Ok(webm_path.to_str()
             .ok_or("Invalid WebM path")?
@@ -424,61 +385,6 @@ async fn export_video(
     export_multi_clips(&clips, &output_path, width, height, &app_handle).await
 }
 
-// Helper function to run FFmpeg with progress monitoring
-async fn run_ffmpeg_with_progress(
-    args: &[&str],
-    app_handle: &tauri::AppHandle,
-    total_duration: Option<f64>,
-) -> Result<(), String> {
-    let mut child = Command::new("ffmpeg")
-        .args(args)
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("Failed to spawn ffmpeg: {}", e))?;
-
-    let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
-    let mut reader = AsyncBufReader::new(stderr).lines();
-
-    // Regex to match FFmpeg progress lines
-    let time_regex = Regex::new(r"time=(\d+):(\d+):(\d+\.\d+)").unwrap();
-    let duration_regex = Regex::new(r"Duration: (\d+):(\d+):(\d+\.\d+)").unwrap();
-
-    let mut total_seconds = total_duration.unwrap_or(0.0);
-
-    while let Ok(Some(line)) = reader.next_line().await {
-        // Parse duration if found
-        if let Some(caps) = duration_regex.captures(&line) {
-            let hours: f64 = caps[1].parse().unwrap_or(0.0);
-            let minutes: f64 = caps[2].parse().unwrap_or(0.0);
-            let seconds: f64 = caps[3].parse().unwrap_or(0.0);
-            total_seconds = hours * 3600.0 + minutes * 60.0 + seconds;
-        }
-
-        // Parse current time if found
-        if let Some(caps) = time_regex.captures(&line) {
-            let hours: f64 = caps[1].parse().unwrap_or(0.0);
-            let minutes: f64 = caps[2].parse().unwrap_or(0.0);
-            let seconds: f64 = caps[3].parse().unwrap_or(0.0);
-            let current_seconds = hours * 3600.0 + minutes * 60.0 + seconds;
-
-            if total_seconds > 0.0 {
-                let progress = (current_seconds / total_seconds * 100.0).min(100.0);
-                // Emit progress event
-                let _ = app_handle.emit_all("export-progress", progress as u32);
-            }
-        }
-    }
-
-    let status = child.wait().await
-        .map_err(|e| format!("Failed to wait for ffmpeg: {}", e))?;
-
-    if !status.success() {
-        return Err("FFmpeg process failed".to_string());
-    }
-
-    Ok(())
-}
 
 // Helper function for single clip export
 async fn export_single_clip(
@@ -491,36 +397,21 @@ async fn export_single_clip(
     // Calculate total duration for progress calculation
     let duration = clip.trim_end - clip.trim_start;
 
-    // Create string bindings to extend lifetime
-    let trim_start_str = clip.trim_start.to_string();
-    let duration_str = duration.to_string();
-    let scale_filter = format!("scale={}:{}", width, height);
+    // Use builder for single clip export
+    let result = utils::ffmpeg::FfmpegBuilder::new()
+        .input(&clip.path)
+        .trim(clip.trim_start, duration)
+        .scale(width, Some(height))
+        .encode()
+        .with_progress()
+        .output(output_path)
+        .run_with_progress(app_handle, Some(duration))
+        .await;
 
-    // Run FFmpeg with progress monitoring and trim
-    let args = vec![
-        "-ss", trim_start_str.as_str(),
-        "-t", duration_str.as_str(),
-        "-i", &clip.path,
-        "-vf", scale_filter.as_str(),
-        "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "23",
-        "-c:a", "aac",
-        "-b:a", "128k",
-        "-progress", "pipe:2", // Send progress to stderr
-        "-y",
-        output_path
-    ];
-
-    run_ffmpeg_with_progress(&args, app_handle, Some(duration)).await?;
-
-    // Verify output file
-    let output_file = Path::new(output_path);
-    if !output_file.exists() {
-        return Err("Output file was not created".to_string());
+    match result {
+        Ok(_) => Ok(output_path.to_string()),
+        Err(e) => Err(e.to_string()),
     }
-
-    Ok(output_path.to_string())
 }
 
 // Helper function for multi-clip export using concat demuxer
@@ -547,33 +438,17 @@ async fn export_multi_clips(
         let temp_output = app_data_dir.join(format!("temp_clip_{}.mp4", i));
         let duration = clip.trim_end - clip.trim_start;
 
-        // Create string bindings to extend lifetime
-        let trim_start_str = clip.trim_start.to_string();
-        let duration_str = duration.to_string();
-        let scale_filter = format!("scale={}:{}", width, height);
-        let temp_output_str = temp_output.to_str().ok_or("Invalid temp path")?.to_string();
+        // Use builder for individual clip processing
+        let result = utils::ffmpeg::FfmpegBuilder::new()
+            .input(&clip.path)
+            .trim(clip.trim_start, duration)
+            .scale(width, Some(height))
+            .encode()
+            .output(temp_output.to_str().ok_or("Invalid temp path")?)
+            .run(app_handle);
 
-        // Trim and scale each clip individually (no progress for individual clips)
-        let output = Command::new("ffmpeg")
-            .args(&[
-                "-ss", trim_start_str.as_str(),
-                "-t", duration_str.as_str(),
-                "-i", &clip.path,
-                "-vf", scale_filter.as_str(),
-                "-c:v", "libx264",
-                "-preset", "medium",
-                "-crf", "23",
-                "-c:a", "aac",
-                "-b:a", "128k",
-                "-y",
-                temp_output_str.as_str()
-            ])
-            .output()
-            .await
-            .map_err(|e| format!("Failed to trim clip {}: {}", i, e))?;
-
-        if !output.status.success() {
-            return Err(format!("FFmpeg trim failed for clip {}: {}", i, String::from_utf8_lossy(&output.stderr)));
+        if let Err(e) = result {
+            return Err(format!("Failed to process clip {}: {}", i, e));
         }
 
         trimmed_clip_paths.push(temp_output);
@@ -595,18 +470,14 @@ async fn export_multi_clips(
         .map_err(|e| format!("Failed to flush concat list: {}", e))?;
     drop(concat_file); // Close file
 
-    // Run FFmpeg with concat demuxer and progress monitoring
-    let args = vec![
-        "-f", "concat",
-        "-safe", "0",
-        "-i", &concat_list_path.to_str().ok_or("Invalid concat list path")?,
-        "-c", "copy", // Stream copy since clips are already processed
-        "-progress", "pipe:2", // Send progress to stderr
-        "-y",
-        output_path
-    ];
-
-    run_ffmpeg_with_progress(&args, app_handle, Some(total_duration)).await?;
+    // Use builder for concat operation
+    let result = utils::ffmpeg::FfmpegBuilder::new()
+        .concat(concat_list_path.to_str().ok_or("Invalid concat list path")?)
+        .stream_copy()
+        .with_progress()
+        .output(output_path)
+        .run_with_progress(app_handle, Some(total_duration))
+        .await;
 
     // Clean up temp files
     for temp_path in &trimmed_clip_paths {
@@ -614,13 +485,10 @@ async fn export_multi_clips(
     }
     let _ = fs::remove_file(&concat_list_path);
 
-    // Verify output file
-    let output_file = Path::new(output_path);
-    if !output_file.exists() {
-        return Err("Output file was not created".to_string());
+    match result {
+        Ok(_) => Ok(output_path.to_string()),
+        Err(e) => Err(e.to_string()),
     }
-
-    Ok(output_path.to_string())
 }
 
 #[tauri::command]
@@ -698,32 +566,26 @@ async fn record_webcam_clip(
         return Err("No frames captured from webcam".to_string());
     }
 
-    // Use FFmpeg to encode the captured frames to MP4
-    // Note: This implementation writes raw frames to disk then encodes
-    // For production, consider piping frames directly to FFmpeg stdin
-    let output = TauriCommand::new_sidecar("ffmpeg")
-        .expect("failed to create ffmpeg command")
-        .args(&[
-            "-f", "rawvideo",
-            "-pixel_format", "rgb24",
-            "-video_size", "1280x720",
-            "-framerate", "30",
-            "-i", temp_raw_path.to_str().ok_or("Invalid temp path")?,
-            "-c:v", "libx264",
-            "-preset", "medium",
-            "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            "-y",
-            &output_path
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run FFmpeg encoding: {}", e))?;
+    // Use builder to encode the captured frames to MP4
+    let raw_config = utils::ffmpeg::RawInputConfig {
+        pixel_format: "rgb24".to_string(),
+        video_size: "1280x720".to_string(),
+        framerate: 30,
+    };
+
+    let result = utils::ffmpeg::FfmpegBuilder::new()
+        .raw_input(raw_config)
+        .encode()
+        .pixel_format("yuv420p")
+        .output(&output_path)
+        .run(&app_handle);
 
     // Clean up temp file
     let _ = fs::remove_file(&temp_raw_path);
 
-    if !output.status.success() {
-        return Err(format!("FFmpeg encoding failed: {}", output.stderr));
+    match result {
+        Ok(_) => {}
+        Err(e) => return Err(e.to_string()),
     }
 
     // Verify output file
