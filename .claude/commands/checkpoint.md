@@ -30,14 +30,29 @@ Steps:
    Co-Authored-By: Claude <noreply@anthropic.com>
    ```
 9. Confirm the commit was successful with `git status`
-10. Provide a summary to the user of:
+10. After commit is complete, perform progress review:
+    - List all files in the log_docs/ directory to identify available progress logs
+    - Identify the most recent log file(s) based on timestamps in filenames
+    - Read and analyze the most recent log file in detail (the one just created)
+    - Read and summarize 2-3 previous log files for historical context
+    - Create a comprehensive progress review in `log_docs/current_progress.md` containing:
+      * Recent accomplishments and features implemented
+      * Current status of work in progress
+      * Any blockers or issues identified
+      * Next steps or planned work
+      * Overall project trajectory and progress patterns
+      * Task-master status summary
+      * Todo list current state
+11. Provide a summary to the user of:
     - What was committed
     - Progress log location
     - Task-master updates made
     - Todo list status
+    - Current progress summary location (log_docs/current_progress.md)
 
 Notes:
 - Use descriptive commit types: feat, fix, refactor, docs, test, chore
 - Progress log should be comprehensive but concise
 - Include code references with file:line format where relevant
 - Update task-master with specific implementation details for future context
+- current_progress.md provides a living snapshot of project state for quick context recovery
