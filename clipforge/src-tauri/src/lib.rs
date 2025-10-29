@@ -7,6 +7,7 @@ use std::process::Stdio;
 use tokio::process::Command;
 use tokio::io::{AsyncBufReadExt, BufReader as AsyncBufReader};
 use regex::Regex;
+use tauri::api::process::Command as TauriCommand;
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
@@ -57,7 +58,7 @@ struct ClipInfo {
 
 #[tauri::command]
 async fn check_ffmpeg() -> Result<String, String> {
-    let output = Command::new_sidecar("ffmpeg")
+    let output = TauriCommand::new_sidecar("ffmpeg")
         .expect("failed to create ffmpeg command")
         .args(&["-version"])
         .output()
@@ -89,7 +90,7 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
     }
 
     // Extract metadata using ffprobe
-    let output = Command::new_sidecar("ffprobe")
+    let output = TauriCommand::new_sidecar("ffprobe")
         .expect("failed to create ffprobe command")
         .args(&[
             "-v", "error",
@@ -215,7 +216,7 @@ async fn generate_thumbnail(
     let thumbnail_path = thumbnails_dir.join(&thumbnail_name);
 
     // Use FFmpeg to extract frame at 1 second
-    let output = Command::new_sidecar("ffmpeg")
+    let output = TauriCommand::new_sidecar("ffmpeg")
         .expect("failed to create ffmpeg command")
         .args(&[
             "-i", &file_path,
@@ -270,7 +271,7 @@ async fn trim_clip(
     let duration = end_time - start_time;
 
     // Run FFmpeg trim command with stream copy (fast, no re-encoding)
-    let output = Command::new_sidecar("ffmpeg")
+    let output = TauriCommand::new_sidecar("ffmpeg")
         .expect("failed to create ffmpeg command")
         .args(&[
             "-ss", &start_time.to_string(),
@@ -332,7 +333,7 @@ async fn save_recording(
         let mp4_path = clips_dir.join(&mp4_filename);
 
         // Run FFmpeg conversion with optimized settings for playback
-        let output = Command::new_sidecar("ffmpeg")
+        let output = TauriCommand::new_sidecar("ffmpeg")
             .expect("failed to create ffmpeg command")
             .args(&[
                 "-i", webm_path.to_str().ok_or("Invalid WebM path")?,
@@ -399,7 +400,7 @@ async fn export_video(
     let (width, height) = match resolution.as_str() {
         "source" => {
             // For source resolution, we need to get it from the first clip
-            if let Some(first_clip) = clips.first() {
+            if let Some(_first_clip) = clips.first() {
                 // We can't easily get source resolution without probing, so use 720p as fallback
                 // In a real implementation, you'd probe the first clip for resolution
                 (1280, 720)
@@ -700,7 +701,7 @@ async fn record_webcam_clip(
     // Use FFmpeg to encode the captured frames to MP4
     // Note: This implementation writes raw frames to disk then encodes
     // For production, consider piping frames directly to FFmpeg stdin
-    let output = Command::new_sidecar("ffmpeg")
+    let output = TauriCommand::new_sidecar("ffmpeg")
         .expect("failed to create ffmpeg command")
         .args(&[
             "-f", "rawvideo",

@@ -492,6 +492,7 @@ name = "clipforge"
 version = "0.1.0"
 dependencies = [
  "nokhwa",
+ "regex",
  "serde",
  "serde_json",
  "tauri",
