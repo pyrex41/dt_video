@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { invoke } from "@tauri-apps/api/tauri"
+import { invoke } from "@tauri-apps/api/core"
 import { Button } from "./ui/button"
 import { Save, Check } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"

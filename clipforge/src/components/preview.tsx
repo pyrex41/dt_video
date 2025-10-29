@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react"
 // @ts-ignore
 import Plyr from "plyr"
 import "plyr/dist/plyr.css"
-import { convertFileSrc } from "@tauri-apps/api/tauri"
+import { convertFileSrc } from "@tauri-apps/api/core"
 import { useClipStore } from "../store/use-clip-store"
 
 export function Preview() {

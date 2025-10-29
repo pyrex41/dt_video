@@ -891,6 +891,7 @@ pub fn run() {
   }
 
   tauri::Builder::default()
+    .plugin(tauri_plugin_dialog::init())
     .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, regenerate_thumbnails, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

@@ -8,6 +8,21 @@
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist"
   },
+  "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": null
+    },
+    "windows": [
+      {
+        "title": "ClipForge",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ]
+  },
   "bundle": {
     "active": true,
     "targets": "all",
@@ -22,19 +37,5 @@
     "macOS": {
       "entitlements": "Entitlements.plist"
     }
-  },
-  "app": {
-    "security": {
-      "csp": null
-    },
-    "windows": [
-      {
-        "title": "ClipForge",
-        "width": 1200,
-        "height": 800,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ]
   }
 }

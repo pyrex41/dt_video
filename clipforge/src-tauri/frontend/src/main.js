@@ -279,7 +279,7 @@ app.ports.recordScreen.subscribe(async () => {
         const path = `clips/${fileName}`
 
         // Save via Tauri backend
-        await invoke('save_recording', { path, data })
+        await invoke('save_recording', { file_name: fileName, data, convert_to_mp4: false })
 
         // Get metadata
         const metadataJson = await invoke('import_file', { path, dest: path })

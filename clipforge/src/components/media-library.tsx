@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { convertFileSrc, invoke } from "@tauri-apps/api/tauri"
+import { convertFileSrc, invoke } from "@tauri-apps/api/core"
 import { Button } from "./ui/button"
 import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp, Search, Trash2, X, RefreshCw } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"

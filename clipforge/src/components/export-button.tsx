@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { invoke } from "@tauri-apps/api/tauri"
-import { save } from "@tauri-apps/api/dialog"
+import { invoke } from "@tauri-apps/api/core"
+import { save } from "@tauri-apps/plugin-dialog"
 import { listen } from "@tauri-apps/api/event"
 import { Button } from "./ui/button"
 import { Download, Settings } from "lucide-react"

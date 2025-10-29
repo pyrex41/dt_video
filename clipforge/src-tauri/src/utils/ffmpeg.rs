@@ -270,9 +270,23 @@ impl FfmpegBuilder {
             }
         }
 
+        // In dev mode, resource_dir might not exist, so fall back to system binary
+        // Check if binary exists in PATH
+        if let Ok(output) = std::process::Command::new("which")
+            .arg(binary_name)
+            .output() {
+            if output.status.success() {
+                let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !path_str.is_empty() {
+                    eprintln!("INFO: Using system {} at {}", binary_name, path_str);
+                    return Ok(std::path::PathBuf::from(path_str));
+                }
+            }
+        }
+
         // Fallback with WARNING - emit to frontend
         let error_msg = format!(
-            "Bundled binary '{}' not found! Using system fallback (not recommended)",
+            "Binary '{}' not found in bundle or system PATH",
             binary_name
         );
         eprintln!("ERROR: {}", error_msg);

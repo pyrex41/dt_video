@@ -1,6 +1,6 @@
 import { create } from "zustand"
 import { subscribeWithSelector } from "zustand/middleware"
-import { invoke } from "@tauri-apps/api/tauri"
+import { invoke } from "@tauri-apps/api/core"
 import type { Clip } from "../types/clip"
 import { debouncedSaveWorkspace, loadWorkspace } from "../lib/workspace-persistence"
 

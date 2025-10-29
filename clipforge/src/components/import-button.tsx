@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { open } from "@tauri-apps/api/dialog"
-import { invoke } from "@tauri-apps/api/tauri"
+import { open } from "@tauri-apps/plugin-dialog"
+import { invoke } from "@tauri-apps/api/core"
 import { Button } from "./ui/button"
 import { Upload } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"

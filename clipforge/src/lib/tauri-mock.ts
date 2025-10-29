@@ -8,7 +8,7 @@ export const isTauri = typeof window !== "undefined" && "__TAURI__" in window
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri) {
     // Dynamic import to avoid loading Tauri in browser
-    const { invoke: tauriInvoke } = await import("@tauri-apps/api/tauri")
+    const { invoke: tauriInvoke } = await import("@tauri-apps/api/core")
     return tauriInvoke<T>(cmd, args)
   }
 
@@ -50,7 +50,7 @@ export async function open(options?: {
   filters?: Array<{ name: string; extensions: string[] }>
 }): Promise<string | string[] | null> {
   if (isTauri) {
-    const { open: tauriOpen } = await import("@tauri-apps/api/dialog")
+    const { open: tauriOpen } = await import("@tauri-apps/plugin-dialog")
     return tauriOpen(options)
   }
 
@@ -64,7 +64,7 @@ export async function save(options?: {
   filters?: Array<{ name: string; extensions: string[] }>
 }): Promise<string | null> {
   if (isTauri) {
-    const { save: tauriSave } = await import("@tauri-apps/api/dialog")
+    const { save: tauriSave } = await import("@tauri-apps/plugin-dialog")
     return tauriSave(options)
   }
 
