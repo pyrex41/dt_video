@@ -18,7 +18,7 @@ export function ImportButton() {
       setError(null)
 
       const selected = await open({
-        multiple: false,
+        multiple: true,
         filters: [
           {
             name: "Video",
@@ -27,29 +27,60 @@ export function ImportButton() {
         ],
       })
 
-      if (!selected || Array.isArray(selected)) return
+      if (!selected) return
 
-      const fileName = selected.split("/").pop() || selected.split("\\").pop() || "video.mp4"
+      // Handle both single file (string) and multiple files (array) for backwards compatibility
+      const files = Array.isArray(selected) ? selected : [selected]
+      if (files.length === 0) return
 
-      const metadata = await invoke<VideoMetadata>("import_file", {
-        filePath: selected,
-      })
+      // Import each file sequentially
+      let importedCount = 0
+      let failedCount = 0
+      const errors: string[] = []
+      let currentEnd = clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0
 
-      const newClip: Clip = {
-        id: `clip_${Date.now()}`,
-        path: metadata.file_path,
-        name: fileName,
-        start: clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0,
-        end: (clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0) + metadata.duration,
-        duration: metadata.duration,
-        track: 0,
-        trimStart: 0,
-        trimEnd: metadata.duration,
-        resolution: `${metadata.width}x${metadata.height}`,
+      for (const filePath of files) {
+        try {
+          const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "video.mp4"
+
+          const metadata = await invoke<VideoMetadata>("import_file", {
+            filePath: filePath,
+          })
+
+          const newClip: Clip = {
+            id: `clip_${Date.now()}_${importedCount}`,
+            path: metadata.file_path,
+            name: fileName,
+            start: currentEnd,
+            end: currentEnd + metadata.duration,
+            duration: metadata.duration,
+            track: 0,
+            trimStart: 0,
+            trimEnd: metadata.duration,
+            resolution: `${metadata.width}x${metadata.height}`,
+            thumbnail_path: metadata.thumbnail_path,
+          }
+
+          addClip(newClip)
+          currentEnd += metadata.duration // Update for next clip
+          importedCount++
+          console.log("[v0] Imported clip:", newClip)
+        } catch (fileError) {
+          failedCount++
+          const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || filePath
+          errors.push(`${fileName}: ${fileError}`)
+          console.error(`[v0] Import error for ${fileName}:`, fileError)
+        }
       }
 
-      addClip(newClip)
-      console.log("[v0] Imported clip:", newClip)
+      // Provide user feedback
+      if (importedCount > 0 && failedCount === 0) {
+        console.log(`[v0] Successfully imported ${importedCount} file(s)`)
+      } else if (importedCount > 0 && failedCount > 0) {
+        setError(`Imported ${importedCount} file(s), but ${failedCount} failed: ${errors.join(", ")}`)
+      } else if (failedCount > 0) {
+        setError(`Failed to import all files: ${errors.join(", ")}`)
+      }
     } catch (err) {
       setError(`Failed to import video: ${err}`)
       console.error("[v0] Import error:", err)

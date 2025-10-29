@@ -17,6 +17,7 @@ struct VideoMetadata {
     width: u32,
     height: u32,
     file_path: String,
+    thumbnail_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -127,15 +128,78 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
     fs::copy(&file_path, &dest_path)
         .map_err(|e| format!("Failed to copy file: {}", e))?;
 
-    // Return metadata with new file path
+    let dest_path_str = dest_path.to_str()
+        .ok_or("Invalid destination path")?
+        .to_string();
+
+    // Generate thumbnail automatically
+    let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), app_handle).await {
+        Ok(path) => Some(path),
+        Err(e) => {
+            eprintln!("Warning: Failed to generate thumbnail: {}", e);
+            None  // Continue even if thumbnail generation fails
+        }
+    };
+
+    // Return metadata with new file path and thumbnail
     Ok(VideoMetadata {
         duration,
         width,
         height,
-        file_path: dest_path.to_str()
-            .ok_or("Invalid destination path")?
-            .to_string(),
+        file_path: dest_path_str,
+        thumbnail_path,
     })
+}
+
+#[tauri::command]
+async fn generate_thumbnail(
+    file_path: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    // Validate input file exists
+    let input_path = Path::new(&file_path);
+    if !input_path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Get app data directory and create thumbnails subdirectory
+    let app_data_dir = app_handle.path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data directory")?;
+    let thumbnails_dir = app_data_dir.join("clips").join("thumbnails");
+    fs::create_dir_all(&thumbnails_dir)
+        .map_err(|e| format!("Failed to create thumbnails directory: {}", e))?;
+
+    // Generate thumbnail filename based on source file
+    let file_name = input_path.file_stem()
+        .ok_or("Invalid file path: no filename")?
+        .to_str()
+        .ok_or("Invalid filename encoding")?;
+    let thumbnail_name = format!("{}_thumb.jpg", file_name);
+    let thumbnail_path = thumbnails_dir.join(&thumbnail_name);
+
+    // Use FFmpeg to extract frame at 1 second
+    let output = Command::new_sidecar("ffmpeg")
+        .expect("failed to create ffmpeg command")
+        .args(&[
+            "-i", &file_path,
+            "-ss", "00:00:01",
+            "-vframes", "1",
+            "-vf", "scale=320:-1",  // Scale width to 320px, maintain aspect ratio
+            "-y",  // Overwrite output file if it exists
+            thumbnail_path.to_str().ok_or("Invalid thumbnail path")?,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("FFmpeg thumbnail generation failed: {}", output.stderr));
+    }
+
+    // Return the thumbnail path
+    Ok(thumbnail_path.to_str()
+        .ok_or("Invalid thumbnail path")?
+        .to_string())
 }
 
 #[tauri::command]
@@ -717,7 +781,7 @@ pub fn run() {
   }
 
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
+    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

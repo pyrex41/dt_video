@@ -10,6 +10,7 @@ export interface Clip {
   trimEnd: number
   resolution?: string
   fps?: number
+  thumbnail_path?: string
 }
 
 export interface VideoMetadata {
@@ -17,4 +18,5 @@ export interface VideoMetadata {
   width: number
   height: number
   file_path: string
+  thumbnail_path?: string
 }

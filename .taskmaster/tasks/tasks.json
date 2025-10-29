@@ -944,7 +944,7 @@
   "mvp": {
     "tasks": [
       {
-        "id": "1",
+        "id": 1,
         "title": "Download FFmpeg Binaries",
         "description": "Download FFmpeg binaries for Mac and Windows platforms to enable video processing functionality.",
         "details": "Navigate to clipforge/src-tauri/binaries and execute ./download.sh to fetch the required FFmpeg binaries. Ensure the binaries are compatible with the target platforms and verify their integrity after download. Update tauri.conf.json to reference the correct externalBin paths if necessary.",
@@ -959,7 +959,7 @@
         "updatedAt": "2025-10-28T22:41:40.143Z"
       },
       {
-        "id": "2",
+        "id": 2,
         "title": "Verify Development Environment Build",
         "description": "Ensure the app builds successfully in development mode on the target platforms.",
         "details": "Run pnpm tauri dev to confirm the frontend (React + TypeScript) and backend (Rust) integrate properly. Check that all dependencies are installed, including Tauri CLI and Node.js/npm. Resolve any build errors related to the current stack.",
@@ -976,7 +976,7 @@
         "updatedAt": "2025-10-28T22:41:42.478Z"
       },
       {
-        "id": "3",
+        "id": 3,
         "title": "Implement Video Import Functionality",
         "description": "Enable users to import MP4/MOV video files into the app.",
         "details": "Use Tauri file picker to select video files. Implement the import_file Tauri command to process the file and add it to the timeline. Integrate with Fabric.js canvas for visual representation. Handle file validation and error cases.",
@@ -993,7 +993,7 @@
         "updatedAt": "2025-10-28T22:41:44.519Z"
       },
       {
-        "id": "4",
+        "id": 4,
         "title": "Develop Timeline Display",
         "description": "Create a visual timeline for displaying imported video clips.",
         "details": "Use Fabric.js to render the timeline canvas. Display clips as visual elements with in/out points. Ensure the timeline is responsive and updates with state changes via Zustand.",
@@ -1010,7 +1010,7 @@
         "updatedAt": "2025-10-28T22:41:46.543Z"
       },
       {
-        "id": "5",
+        "id": 5,
         "title": "Integrate Preview Player",
         "description": "Add a video player for previewing clips in the timeline.",
         "details": "Integrate Plyr player to play selected clips. Sync playback with timeline interactions. Ensure smooth playback and handle multiple clips.",
@@ -1027,7 +1027,7 @@
         "updatedAt": "2025-10-28T22:41:48.755Z"
       },
       {
-        "id": "6",
+        "id": 6,
         "title": "Implement Basic Trim Functionality",
         "description": "Allow users to set in/out points for trimming single clips.",
         "details": "Add UI controls on the timeline for setting trim points. Implement trim_clip Tauri command using FFmpeg. Update the timeline and preview accordingly.",
@@ -1044,7 +1044,7 @@
         "updatedAt": "2025-10-28T22:41:51.140Z"
       },
       {
-        "id": "7",
+        "id": 7,
         "title": "Add Export to MP4 Feature",
         "description": "Enable exporting edited clips to MP4 format.",
         "status": "done",
@@ -1084,7 +1084,7 @@
         "updatedAt": "2025-10-28T23:14:49.256Z"
       },
       {
-        "id": "8",
+        "id": 8,
         "title": "Polish UI/UX Elements",
         "description": "Improve usability with loading states, error messages, and responsive design.",
         "details": "Add loading spinners to ImportButton and ExportButton. Enhance error display in Alert components. Ensure consistent Tailwind CSS styling, keyboard navigation, tooltips, and responsive layout. Add basic help text.",
@@ -1100,7 +1100,7 @@
         "expansionPrompt": "Subtask for enhancing UI components like loading states, error handling, and responsiveness."
       },
       {
-        "id": "9",
+        "id": 9,
         "title": "Perform Packaging Build",
         "description": "Build and package the app for Mac and Windows distribution.",
         "details": "Run pnpm tauri build on Mac and Windows. Ensure FFmpeg binaries are bundled. Verify app icon, launch time (<5s), and bundle size (<200MB). Generate .dmg or .exe files.",
@@ -1116,7 +1116,7 @@
         "expansionPrompt": "Separate packaging into platform-specific builds and bundle verification subtasks."
       },
       {
-        "id": "10",
+        "id": 10,
         "title": "Conduct Final Testing and Validation",
         "description": "Run comprehensive tests for performance, stability, and MVP requirements.",
         "details": "Perform end-to-end testing of the full workflow: import → timeline → preview → trim → export. Test with 5+ clips for responsiveness. Monitor memory usage, check for crashes during a 10-minute session, and verify FFmpeg process cleanup.",
@@ -1139,7 +1139,580 @@
       "completedCount": 7,
       "tags": [
         "mvp"
+      ],
+      "created": "2025-10-29T13:43:27.517Z",
+      "description": "Tasks for mvp context"
+    }
+  },
+  "recording": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Enhance File Import for Multiple Files",
+        "description": "Update the file import functionality to support selecting and importing multiple video files at once using the native file dialog.",
+        "details": "Modify the Tauri dialog options to set 'multiple: true' in the file picker. Update the frontend to handle an array of selected files. Loop through each file, validate format, and call the existing 'import_file' command for each. Ensure error handling for unsupported formats and provide user feedback for each file.",
+        "testStrategy": "Test by selecting multiple supported video files (MP4, MOV, WebM, AVI) and verify they are all imported to the clips directory and added to the timeline. Test with unsupported files to ensure errors are handled gracefully.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Modify Tauri Dialog for Multiple File Selection",
+            "description": "Update the Tauri file dialog configuration to allow selecting multiple video files at once by setting the 'multiple' option to true.",
+            "dependencies": [],
+            "details": "Locate the existing file picker dialog code in the Tauri backend. Modify the dialog options object to include 'multiple: true' to enable multi-selection. Ensure the dialog still filters for supported video formats like MP4, MOV, WebM, and AVI. Test the dialog change to confirm it returns an array of file paths when multiple files are selected.\n<info added on 2025-10-29T14:07:34.566Z>\nModified import-button.tsx to set multiple: true in Tauri dialog. Files are now returned as an array when multiple files are selected. Added backwards compatibility to handle both string and array returns.\n</info added on 2025-10-29T14:07:34.566Z>",
+            "status": "done",
+            "testStrategy": "Open the file dialog and select multiple supported video files; verify that an array of file paths is returned instead of a single path.",
+            "updatedAt": "2025-10-29T14:08:14.797Z",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Update Frontend to Handle Multiple File Array",
+            "description": "Modify the frontend code to process an array of selected files, looping through each to validate format and call the import command.",
+            "dependencies": [],
+            "details": "In the frontend import function, change the logic to expect an array of files from the dialog. Implement a loop that iterates over each file in the array. For each file, perform format validation (e.g., check file extension against allowed types). If valid, call the existing 'import_file' command with the file path. Prepare for error handling in the next subtask. Update any UI state or variables to track the list of files being processed.\n<info added on 2025-10-29T14:07:48.757Z>\nUpdated frontend handleImport function to loop through array of files. Each file is imported sequentially using the existing import_file command. Added importedCount and failedCount tracking. Fixed clip positioning by maintaining currentEnd variable that accumulates duration across imports. Each clip gets unique ID with timestamp and counter.\n</info added on 2025-10-29T14:07:48.757Z>",
+            "status": "done",
+            "testStrategy": "Select multiple files via the updated dialog and check that the frontend receives an array and begins looping through them, validating each file's format.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:08:16.073Z"
+          },
+          {
+            "id": 3,
+            "title": "Implement Validation, Error Handling, and User Feedback",
+            "description": "Add validation checks, error handling for unsupported formats, and provide user feedback for each file during the import process.",
+            "dependencies": [],
+            "details": "Within the loop from the previous subtask, add detailed validation logic (e.g., check MIME type or extension). If a file is unsupported, log an error and skip it, providing a user notification (e.g., toast message or alert) indicating the failure reason. For successful imports, provide feedback like 'File X imported successfully'. Ensure the loop continues processing other files even if one fails. Integrate with any progress tracking if needed, but keep it simple for this subtask. Handle potential backend errors from the 'import_file' command gracefully.\n<info added on 2025-10-29T14:08:05.129Z>\nImplemented comprehensive error handling with try-catch blocks around each file import. Errors are collected in an array with filename. User feedback provided via setError with counts of successful vs failed imports. Console logging added for both success and error cases. Import continues even if individual files fail, providing graceful degradation.\n</info added on 2025-10-29T14:08:05.129Z>",
+            "status": "done",
+            "testStrategy": "Test with a mix of supported and unsupported files: select multiple files including invalid ones, verify that supported files are imported, unsupported ones are skipped with error messages, and user feedback is shown for each file's status.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:08:17.312Z"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already broken down into clear subtasks covering dialog modification, frontend handling, and error management.",
+        "updatedAt": "2025-10-29T14:08:17.312Z"
+      },
+      {
+        "id": "2",
+        "title": "Add Batch Import Progress Indicator",
+        "description": "Implement a progress indicator to show the status of importing multiple files, providing feedback during batch operations.",
+        "details": "Create a progress bar component in the UI that updates as each file is processed. Use a state variable to track import progress (e.g., number of files imported out of total). Integrate with the loop in the import function to update progress after each successful import. Display estimated time or percentage complete.",
+        "testStrategy": "Import a batch of 5-10 video files and observe the progress indicator updating in real-time. Verify it handles errors without breaking the progress flow.",
+        "priority": "medium",
+        "dependencies": [
+          "1"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create Progress Bar UI Component",
+            "description": "Develop a reusable progress bar component for the UI that displays import progress with percentage and estimated time.",
+            "dependencies": [],
+            "details": "Build a React component using a library like Material-UI or custom CSS to render a progress bar. It should accept props for current progress (e.g., files imported), total files, and estimated time. Ensure it updates dynamically and handles edge cases like 0% or 100%.",
+            "status": "pending",
+            "testStrategy": "Render the component in a test environment and simulate progress updates to verify visual accuracy and responsiveness.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Integrate Progress Tracking with Import Loop and Handle Errors",
+            "description": "Update the batch import function to track progress state and integrate with the progress bar, including error handling.",
+            "dependencies": [
+              1
+            ],
+            "details": "Modify the import loop in the frontend to maintain a state variable for progress (e.g., imported count). Update the progress bar after each file import. Implement error handling to skip failed imports without halting progress, and display error messages. Ensure asynchronous updates work correctly.",
+            "status": "pending",
+            "testStrategy": "Perform batch imports with 5-10 files, including some that cause errors (e.g., unsupported formats), and verify the progress bar updates accurately, handles errors gracefully, and completes without breaking.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 4,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already divided into UI component creation and integration with import logic."
+      },
+      {
+        "id": "3",
+        "title": "Create Media Library Sidebar Component",
+        "description": "Develop a collapsible sidebar panel to display all imported media clips with basic structure for thumbnails and metadata.",
+        "details": "Build a new MediaLibrary React component as a sidebar (left or right side). Use existing 'list_clips' command to fetch clips from the clips directory. Render a list of clips with placeholders for thumbnails and metadata. Make the sidebar collapsible with a toggle button.",
+        "testStrategy": "Add several clips via import and verify the sidebar lists them correctly. Test collapsing/expanding the sidebar and ensure it integrates with the main UI layout.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Build Basic MediaLibrary React Component Structure",
+            "description": "Create the foundational React component for the MediaLibrary sidebar, including the basic JSX structure, CSS for sidebar layout, and placeholders for clip list rendering.",
+            "dependencies": [],
+            "details": "Implement a new MediaLibrary component in React with a div container styled as a sidebar (e.g., fixed position left or right). Include a list container for clips, with placeholder elements for thumbnails and metadata. Ensure responsive design basics and integrate into the main app layout.\n<info added on 2025-10-29T14:10:16.739Z>\nCreated MediaLibrary React component with sidebar structure. Implemented collapsed/expanded states with smooth transitions. Added header with clip count, loading states, and empty state with placeholder icons. Used Tailwind CSS with zinc color scheme matching app design. Component positioned on left side with fixed width (80 for expanded, 12 for collapsed).\n</info added on 2025-10-29T14:10:16.739Z>",
+            "status": "done",
+            "testStrategy": "Render the component in the app and verify the sidebar appears correctly without content, checking for proper positioning and basic styling.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:11:08.558Z"
+          },
+          {
+            "id": 2,
+            "title": "Integrate 'list_clips' Command for Clip Fetching",
+            "description": "Connect the MediaLibrary component to the existing 'list_clips' command to fetch and display a list of imported media clips.",
+            "dependencies": [
+              1
+            ],
+            "details": "Use Tauri's invoke function to call 'list_clips' on component mount or refresh. Store the fetched clips in component state. Map over the clips array to render each clip with placeholders for thumbnails and metadata, ensuring the list updates dynamically.\n<info added on 2025-10-29T14:10:37.773Z>\nIntegrated existing list_clips Tauri command to fetch clip files. Component calls invoke('list_clips') on mount and whenever clips array changes via useEffect. Returns ClipInfo array with name, path, size. Added loading state during fetch and error handling. Displays file size formatted as B/KB/MB/GB. Each clip rendered as card with placeholder thumbnail (Film icon) and metadata.\n</info added on 2025-10-29T14:10:37.773Z>",
+            "status": "done",
+            "testStrategy": "Import a few clips and verify they appear in the sidebar list. Check that the list refreshes when new clips are added, and handle cases with no clips gracefully.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:11:09.886Z"
+          },
+          {
+            "id": 3,
+            "title": "Add Collapsible Functionality and Test UI Integration",
+            "description": "Implement toggle functionality to collapse and expand the sidebar, and ensure it integrates seamlessly with the main UI layout.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Add a state variable for collapsed/expanded status. Include a toggle button (e.g., hamburger icon) that switches the state. Use CSS transitions or conditional rendering to hide/show the sidebar content. Adjust main content area width dynamically to accommodate the sidebar's state.\n<info added on 2025-10-29T14:10:58.294Z>\nImplemented collapsible functionality with toggle button positioned on right edge of sidebar. Uses state to control isCollapsed boolean. Smooth 300ms transition via Tailwind. Collapsed state shows only 12px width with vertical text and icon. Expanded state shows full 320px width with all content. Toggle button shows ChevronLeft/ChevronRight icons. Integrated into App.tsx layout using flexbox - sidebar positioned before main content area.\n</info added on 2025-10-29T14:10:58.294Z>",
+            "status": "done",
+            "testStrategy": "Test toggling the sidebar open and closed, verifying smooth animations and that the main UI resizes appropriately. Ensure the sidebar integrates without overlapping or breaking layout on different screen sizes.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:11:11.164Z"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already subdivided into component structure, data fetching, and collapsible functionality.",
+        "updatedAt": "2025-10-29T14:11:11.164Z"
+      },
+      {
+        "id": "4",
+        "title": "Implement Thumbnail Generation",
+        "description": "Generate thumbnail images for each media clip using FFmpeg to display in the media library.",
+        "details": "Create a 'generate_thumbnail' Rust command that uses FFmpeg to extract a frame (e.g., at 1 second) from each video file: 'ffmpeg -i input.mp4 -ss 00:00:01 -vframes 1 thumbnail.jpg'. Store thumbnails in 'clips/thumbnails/' directory. Call this command when importing files or on demand for existing clips. Update the Clip interface to include thumbnail path.",
+        "testStrategy": "Import a video file and check that a thumbnail is generated and saved. Verify the thumbnail displays correctly in the library UI. Test with different video formats and resolutions.",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Create generate_thumbnail Rust Command with FFmpeg",
+            "description": "Develop a Rust function that executes FFmpeg to extract a single frame from video files at a specified timestamp.",
+            "dependencies": [],
+            "details": "Implement a 'generate_thumbnail' function in Rust that takes an input video path and output thumbnail path. Use std::process::Command to run FFmpeg with arguments like '-i input.mp4 -ss 00:00:01 -vframes 1 thumbnail.jpg'. Handle errors from command execution and ensure FFmpeg is available on the system.\n<info added on 2025-10-29T14:14:32.853Z>\nThe function validates that the input file exists, creates the thumbnails directory if necessary, generates the thumbnail filename as {filename}_thumb.jpg, uses FFmpeg with the scaling filter '-vf scale=320:-1' to resize the extracted frame, and returns the thumbnail path on success or an error. The command is registered in tauri::generate_handler.\n</info added on 2025-10-29T14:14:32.853Z>",
+            "status": "done",
+            "testStrategy": "Test the function with a sample video file to verify a thumbnail is generated without errors.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:16:05.577Z"
+          },
+          {
+            "id": 2,
+            "title": "Implement Thumbnail Storage and Path Management",
+            "description": "Set up the directory structure for storing thumbnails and manage file paths for each clip.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create the 'clips/thumbnails/' directory if it doesn't exist. Generate unique thumbnail filenames based on clip IDs or names (e.g., clip_id.jpg). Ensure paths are correctly constructed and stored relative to the project root. Handle file I/O operations for saving thumbnails.\n<info added on 2025-10-29T14:14:57.639Z>\nImplemented thumbnail storage in clips/thumbnails/ directory. Directory is auto-created via fs::create_dir_all. Thumbnails named using file stem + _thumb.jpg pattern. Path resolution uses app_handle.path_resolver().app_data_dir(). Files stored as JPEG with 320px width, aspect ratio preserved via FFmpeg scale filter.\n</info added on 2025-10-29T14:14:57.639Z>",
+            "status": "done",
+            "testStrategy": "Verify that thumbnails are saved in the correct directory with appropriate filenames after generation.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:16:06.775Z"
+          },
+          {
+            "id": 3,
+            "title": "Integrate Thumbnail Generation with Import Process",
+            "description": "Modify the import functionality to automatically generate thumbnails for new clips and provide on-demand generation for existing ones.",
+            "dependencies": [
+              1,
+              2
+            ],
+            "details": "Update the import command to call generate_thumbnail after successfully importing a video file. Add a separate command or method for generating thumbnails on demand for existing clips. Ensure integration with Task 3's media library component to display thumbnails.\n<info added on 2025-10-29T14:15:30.340Z>\nIntegrated thumbnail generation into import_file workflow. After copying video to clips dir, automatically calls generate_thumbnail. Returns thumbnail_path in VideoMetadata as Option<String>. Gracefully handles failures with eprintln warning, continues import even if thumbnail fails. Frontend receives thumbnail_path and stores in Clip model. Import-button passes thumbnail_path to newClip object.\n</info added on 2025-10-29T14:15:30.340Z>",
+            "status": "done",
+            "testStrategy": "Import a new video file and confirm a thumbnail is generated and stored. Test on-demand generation for an existing clip.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:16:08.007Z"
+          },
+          {
+            "id": 4,
+            "title": "Update Clip Data Model and Test Across Formats",
+            "description": "Extend the Clip interface to include thumbnail path and test thumbnail generation with various video formats and resolutions.",
+            "dependencies": [
+              2,
+              3
+            ],
+            "details": "Modify the Clip struct or interface to add a thumbnail_path field. Update any related serialization or database handling. Test with different formats like MP4, AVI, MOV, and resolutions such as 1080p, 4K to ensure FFmpeg handles them correctly.\n<info added on 2025-10-29T14:15:44.153Z>\nUpdated Clip and VideoMetadata TypeScript interfaces to include thumbnail_path?: string. MediaLibrary component now uses convertFileSrc to display thumbnails from file paths. Shows actual video frame thumbnails via img tag with object-cover. Falls back to Film icon placeholder if thumbnail_path missing. Works with MP4, MOV, WebM, AVI formats via FFmpeg frame extraction. Frontend displays duration and resolution metadata alongside thumbnails.\n</info added on 2025-10-29T14:15:44.153Z>",
+            "status": "done",
+            "testStrategy": "Update a Clip object with thumbnail path and verify it displays in the UI. Test thumbnail generation on videos of different formats and resolutions, checking for quality and correctness.",
+            "parentId": "undefined",
+            "updatedAt": "2025-10-29T14:16:09.240Z"
+          }
+        ],
+        "complexity": 8,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already broken into FFmpeg command creation, storage management, integration, and data model updates.",
+        "updatedAt": "2025-10-29T14:16:09.240Z"
+      },
+      {
+        "id": "5",
+        "title": "Display Metadata in Media Library",
+        "description": "Show detailed metadata for each clip in the library, including duration, resolution, file size, and format.",
+        "details": "Extend the MediaLibrary component to display metadata fetched from the clips (e.g., using FFmpeg probe or file stats). Format duration as MM:SS, resolution as WxH, file size in MB. Retrieve this data during import or thumbnail generation and store in clip objects. Render metadata below each thumbnail.",
+        "testStrategy": "Import clips with varying properties and verify metadata is accurately displayed (e.g., check duration matches video length). Test with edge cases like very short or long videos.",
+        "priority": "high",
+        "dependencies": [
+          "3",
+          "4"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Fetch and Store Metadata During Import",
+            "description": "Retrieve metadata such as duration, resolution, file size, and format for each clip during the import or thumbnail generation process using FFmpeg probe or file stats, and store this data in the clip objects.",
+            "dependencies": [],
+            "details": "Modify the import function to use FFmpeg probe to extract metadata like duration (in seconds), resolution (width x height), file size (in bytes), and format. Convert and store formatted values (e.g., duration as MM:SS, file size in MB) in the clip object properties. Ensure this happens synchronously or asynchronously without blocking the UI, and handle errors for unsupported files.",
+            "status": "pending",
+            "testStrategy": "Import clips with known metadata and verify stored values match expected outputs, including edge cases like very short durations or high resolutions.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Extend UI to Display Formatted Metadata",
+            "description": "Update the MediaLibrary component to render the stored metadata below each thumbnail, formatting it appropriately for user readability.",
+            "dependencies": [
+              1
+            ],
+            "details": "In the MediaLibrary component, add UI elements (e.g., divs or spans) below each thumbnail to display the formatted metadata: duration as MM:SS, resolution as WxH, file size in MB, and format. Use React state to access the clip objects and render dynamically. Ensure the layout is responsive and visually appealing, integrating with existing thumbnail rendering.",
+            "status": "pending",
+            "testStrategy": "Load the media library with imported clips and visually inspect that metadata is displayed correctly below thumbnails. Test with various clip properties to ensure accuracy and formatting across different devices and screen sizes.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already split into metadata fetching/storage and UI rendering."
+      },
+      {
+        "id": "6",
+        "title": "Enable Drag-and-Drop from Library to Timeline",
+        "description": "Allow users to drag clips from the media library directly onto the timeline for editing.",
+        "details": "Make each clip item in the MediaLibrary draggable using React DnD or native HTML5 drag API. On drop, integrate with the existing timeline store to add the clip at the drop position. Ensure the clip data (path, metadata) is passed correctly.",
+        "testStrategy": "Drag a clip from the library to the timeline and verify it appears at the correct position. Test multiple drags and ensure timeline updates properly without errors.",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Drag Functionality in MediaLibrary Component",
+            "description": "Make each clip item in the MediaLibrary component draggable using React DnD or native HTML5 drag API, ensuring clip data like path and metadata is prepared for transfer.",
+            "dependencies": [],
+            "details": "Update the MediaLibrary React component to add drag event handlers to each clip item. Use React DnD's DragSource or native dragstart event to set the drag data with clip path, metadata, and any necessary identifiers. Ensure the component is ready for dragging after the sidebar is implemented.",
+            "status": "pending",
+            "testStrategy": "Manually drag a clip item and verify that drag events are triggered without errors, and data is set correctly in the drag event.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Handle Drop Events on Timeline and Integrate with Store",
+            "description": "Implement drop event handling on the timeline to receive dragged clips and add them at the correct position using the existing timeline store.",
+            "dependencies": [
+              1
+            ],
+            "details": "Add drop event listeners to the timeline component using React DnD's DropTarget or native drop events. On drop, parse the transferred clip data and call the timeline store methods to insert the clip at the drop position. Handle positioning logic to place the clip accurately based on drop coordinates.",
+            "status": "pending",
+            "testStrategy": "Drag a clip from the library to various positions on the timeline and verify it is added correctly, with metadata intact, and the timeline updates without errors. Test multiple drags to ensure no conflicts.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already divided into implementing drag functionality and handling drop events."
+      },
+      {
+        "id": "7",
+        "title": "Add Delete and Search/Filter to Media Library",
+        "description": "Implement functionality to delete clips from the library with confirmation, and add search/filter by name, duration, or resolution.",
+        "details": "Add a delete button to each clip item with a confirmation dialog. On confirm, remove the file from clips directory and update the store. Implement a search input that filters the list based on clip name or metadata (e.g., duration > X seconds). Use state to manage filtered list.",
+        "testStrategy": "Delete a clip and confirm it's removed from directory and UI. Search for clips by name or filter by duration/resolution and verify only matching clips are shown.",
+        "priority": "medium",
+        "dependencies": [
+          "3",
+          "5"
+        ],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement Delete Functionality with Confirmation",
+            "description": "Add a delete button to each clip item in the media library with a confirmation dialog. Upon confirmation, remove the clip file from the clips directory and update the application store to reflect the removal.",
+            "dependencies": [],
+            "details": "Integrate a delete button into the MediaLibrary component for each clip item. Use a confirmation dialog (e.g., via a modal or browser confirm) to prevent accidental deletions. On confirmation, invoke a backend command to delete the file from the clips directory and update the store by removing the clip from the list. Ensure the UI updates immediately after deletion.",
+            "status": "pending",
+            "testStrategy": "Manually delete a clip from the library, confirm the action in the dialog, and verify the file is removed from the clips directory and the clip no longer appears in the UI list.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement Search and Filter Logic",
+            "description": "Add a search input field that allows filtering the media library clips by name, duration, or resolution, updating the displayed list in real-time based on user input.",
+            "dependencies": [],
+            "details": "Add a search input component to the MediaLibrary sidebar. Implement filtering logic using state to manage a filtered list of clips. Support filters for clip name (partial match), duration (e.g., greater than X seconds), and resolution (e.g., exact WxH). Use metadata from Task 5 for accurate filtering. Debounce the input for performance and update the UI to show only matching clips.",
+            "status": "pending",
+            "testStrategy": "Enter search terms for clip names, set filters for duration and resolution, and verify that only matching clips are displayed in the library list, with non-matching ones hidden.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 5,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already subdivided into delete functionality and search/filter logic."
+      },
+      {
+        "id": "8",
+        "title": "Implement PiP Recording Mode",
+        "description": "Add picture-in-picture functionality to overlay webcam on screen recording with adjustable position and size.",
+        "details": "Extend the screen recording UI to include a PiP toggle. Use FFmpeg for real-time compositing of webcam stream over screen capture. Add controls for PiP position (corners) and size. Preview the composited view before recording. Ensure audio mixing (microphone + system).",
+        "testStrategy": "Enable PiP, select screen and webcam, record a short clip, and verify the output has webcam overlay in correct position. Test audio sync and export quality.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Extend Screen Recording UI for PiP Toggle",
+            "description": "Add a toggle button and basic controls to the screen recording interface to enable or disable picture-in-picture mode.",
+            "dependencies": [],
+            "details": "Modify the existing screen recording UI component to include a new PiP toggle checkbox or button. Ensure it integrates seamlessly with the current layout and updates the recording state accordingly. This should allow users to activate PiP before starting a recording session.",
+            "status": "pending",
+            "testStrategy": "Verify the toggle appears in the UI, can be enabled/disabled, and reflects in the application state without errors.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement FFmpeg Real-Time Compositing for Webcam Overlay",
+            "description": "Use FFmpeg to composite the webcam stream over the screen capture in real-time during recording.",
+            "dependencies": [
+              1
+            ],
+            "details": "Integrate FFmpeg commands into the recording backend to overlay the webcam feed onto the screen capture stream. This involves setting up a pipeline that captures screen and webcam simultaneously, applies the overlay filter, and outputs the composited video. Ensure low latency for real-time preview and recording.",
+            "status": "pending",
+            "testStrategy": "Start a recording with PiP enabled, check that the webcam appears overlaid on the screen capture in the output file, and measure latency to ensure it's suitable for real-time use.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Add Controls for PiP Position and Size Adjustments",
+            "description": "Implement UI controls to adjust the position (e.g., corners) and size of the PiP webcam overlay.",
+            "dependencies": [
+              1
+            ],
+            "details": "Extend the PiP UI controls to include dropdowns or sliders for selecting position (top-left, top-right, bottom-left, bottom-right) and size (e.g., small, medium, large). Update the FFmpeg filter parameters dynamically based on user selections. Include a preview mode to show changes before recording.",
+            "status": "pending",
+            "testStrategy": "Adjust position and size settings, preview the changes, and record a short clip to verify the overlay appears in the correct location and dimensions in the final video.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Ensure Audio Mixing for Microphone and System Audio",
+            "description": "Integrate audio mixing to combine microphone input with system audio in the PiP recording.",
+            "dependencies": [
+              2
+            ],
+            "details": "Modify the FFmpeg pipeline to include audio streams from both microphone and system sources. Use FFmpeg's amix filter to merge them into a single audio track. Ensure synchronization with the video compositing and handle cases where one audio source might be missing.",
+            "status": "pending",
+            "testStrategy": "Record with both microphone and system audio enabled, play back the video, and check that both audio sources are present, mixed properly, and in sync with the video.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Test Composited Output and Synchronization",
+            "description": "Conduct comprehensive testing of the PiP recording mode to verify composited video quality, audio sync, and overall functionality.",
+            "dependencies": [
+              2,
+              3,
+              4
+            ],
+            "details": "Perform end-to-end testing across different devices, resolutions, and scenarios. Include tests for preview accuracy, export quality, audio-video sync, and edge cases like low webcam resolution or interrupted streams. Document any issues and refine the implementation based on findings.",
+            "status": "pending",
+            "testStrategy": "Execute a series of recordings with various settings, analyze outputs for overlay correctness, sync accuracy, and quality, and compare against expected results to ensure reliability.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 9,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already extensively broken into UI extension, FFmpeg compositing, controls, audio mixing, and testing."
+      },
+      {
+        "id": "9",
+        "title": "Add Advanced Audio Controls",
+        "description": "Enhance audio capture with level monitoring, mute/unmute controls, and improved mixing.",
+        "details": "Add audio level meters in the recording UI using Web Audio API to visualize microphone input. Implement mute/unmute toggles for microphone and system audio. Extend recording commands to handle these controls. Ensure AAC encoding for audio export.",
+        "testStrategy": "During recording, check audio levels update in real-time. Test mute/unmute functionality and verify audio is included/excluded in the final recording.",
+        "priority": "medium",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Integrate Web Audio API for Audio Level Monitoring",
+            "description": "Implement audio level meters in the recording UI using Web Audio API to visualize microphone input levels in real-time.",
+            "dependencies": [],
+            "details": "Use Web Audio API to create an analyser node connected to the microphone input stream. Sample the frequency data periodically and update UI level meters (e.g., bars or VU meters) to reflect current audio levels. Ensure the meters are displayed prominently in the recording interface and handle cases where no microphone is available.",
+            "status": "pending",
+            "testStrategy": "During a recording session, speak into the microphone and verify that the level meters update in real-time, showing fluctuations based on audio input volume.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Implement Mute/Unmute Toggles for Microphone and System Audio",
+            "description": "Add toggle controls for muting and unmuting microphone and system audio sources during recording.",
+            "dependencies": [],
+            "details": "Create UI buttons or switches for microphone mute/unmute and system audio mute/unmute. Connect these to state variables that control whether audio streams are included in the recording. Use Web Audio API to enable/disable gain nodes or disconnect/connect audio sources based on toggle states. Ensure toggles are accessible in the recording UI and provide visual feedback (e.g., icons or colors) for mute/unmute status.",
+            "status": "pending",
+            "testStrategy": "Toggle mute/unmute for microphone and system audio during recording, then play back the recording to verify that muted sources are excluded and unmuted sources are included in the final audio.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 3,
+            "title": "Extend Recording Commands and Ensure AAC Encoding for Export",
+            "description": "Update recording commands to handle new audio controls and confirm AAC encoding for exported audio files.",
+            "dependencies": [],
+            "details": "Modify the recording start/stop commands to incorporate mute/unmute states and level monitoring data. Integrate the audio controls into the command parameters or state management. For export, ensure that the audio is encoded in AAC format using appropriate libraries or FFmpeg integration. Update any backend logic to process and export audio with these enhancements, maintaining compatibility with existing recording workflows.",
+            "status": "pending",
+            "testStrategy": "Initiate a recording with various mute/unmute settings, stop the recording, and export the file. Verify the exported audio file uses AAC encoding and that the audio content matches the controls applied during recording (e.g., muted parts are silent).",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 7,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "No further expansion needed as the task is already divided into level monitoring, mute toggles, and command extensions."
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2025-10-29T14:16:09.241Z",
+      "taskCount": 9,
+      "completedCount": 3,
+      "tags": [
+        "recording"
       ]
+    }
+  },
+  "timeline": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Fix Jumpy Drag Performance",
+        "description": "Resolve the issue where clips, playhead, and trim handles jump during drag operations in the timeline.",
+        "details": "In timeline.tsx, examine the drag handlers from lines 199-327. Implement a check using isDraggingRef to prevent unnecessary re-renders during drag. Use React's useRef to track dragging state and conditionally update positions only when dragging ends or at throttled intervals. Pseudo-code: const isDraggingRef = useRef(false); onMouseDown: isDraggingRef.current = true; onMouseMove: if (!isDraggingRef.current) return; // throttle updates; onMouseUp: isDraggingRef.current = false; updatePosition();",
+        "testStrategy": "Manually test dragging clips, playhead, and trim handles across the timeline. Verify smooth movement without jumps by observing frame rates and position accuracy. Use browser dev tools to check for excessive re-renders.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 2,
+        "title": "Fix Playhead Seek During Playback",
+        "description": "Allow clicking on the timeline to seek the playhead even when video is playing.",
+        "details": "Update timeline.tsx lines 334-340 and preview.tsx lines 144-168 to remove the check that prevents seeking when isPlaying is true. Ensure the seek function updates the playhead position and syncs with Plyr's currentTime. Pseudo-code: onTimelineClick: const newTime = calculateTimeFromClick(event); setPlayhead(newTime); plyr.currentTime = newTime; // regardless of isPlaying",
+        "testStrategy": "Play a video and click different points on the timeline. Confirm the playhead jumps to the clicked position and video playback continues from there. Test edge cases like clicking near clip boundaries.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 3,
+        "title": "Fix Play/Pause Sync Issues",
+        "description": "Ensure play/pause controls consistently sync the isPlaying state with Plyr video playback.",
+        "details": "In controls.tsx lines 31-33 and preview.tsx lines 79-80 and 163-167, synchronize the isPlaying state with Plyr's events. Use Plyr's 'play' and 'pause' event listeners to update the state reliably. Pseudo-code: plyr.on('play', () => setIsPlaying(true)); plyr.on('pause', () => setIsPlaying(false)); Ensure external controls trigger plyr.play() or plyr.pause() directly.",
+        "testStrategy": "Use play/pause buttons and keyboard shortcuts to toggle playback. Verify that the video state matches the UI state in all scenarios, including rapid toggling and external interruptions.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 4,
+        "title": "Implement Keyboard Shortcuts",
+        "description": "Add required keyboard shortcuts for play/pause, delete, deselect, and select all.",
+        "details": "In App.tsx, add a global keyboard event listener using useEffect with window.addEventListener('keydown'). Check activeElement to avoid interfering with inputs. Map keys: Space -> toggle play/pause; Delete/Backspace -> delete selected clip; Escape -> deselect; Cmd+A/Ctrl+A -> select all. Pseudo-code: useEffect(() => { const handleKeyDown = (e) => { if (document.activeElement.tagName === 'INPUT') return; switch(e.key) { case ' ': togglePlayPause(); break; case 'Delete': case 'Backspace': deleteSelectedClip(); break; case 'Escape': deselect(); break; case 'a': if (e.ctrlKey || e.metaKey) selectAll(); break; } }; window.addEventListener('keydown', handleKeyDown); return () => window.removeEventListener('keydown', handleKeyDown); }, []);",
+        "testStrategy": "Test each shortcut in the app: Press Space to play/pause, Delete to remove selected clips, Escape to deselect, Cmd+A to select all. Ensure shortcuts work when timeline is focused and don't trigger in text inputs.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 5,
+        "title": "Implement Multi-Track Timeline UI",
+        "description": "Add visual support for 2+ track lanes, allowing drag between tracks, labels, adjustable height, and overlap handling.",
+        "details": "In timeline.tsx, modify lines 72-81 to loop over tracks from the data model (clip.track field in types/clip.ts:8). Render lanes with Y-offset per track. Add drag logic to change clip.track on drop. Implement overlap detection: when dragging, check for overlaps on the target track and prompt user. Visualize overlaps on different tracks. Pseudo-code: const tracks = getUniqueTracks(); tracks.map((track, index) => <TrackLane key={track} yOffset={index * laneHeight} onDrop={(clip) => { if (checkOverlap(clip, track)) promptUser(); else updateClipTrack(clip, track); }} />);",
+        "testStrategy": "Add multiple clips to different tracks. Drag clips between tracks and verify they snap to lanes. Test overlap scenarios: attempt to place overlapping clips on the same track and confirm prompt appears. Check visual overlap indicators.",
+        "priority": "high",
+        "dependencies": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 6,
+        "title": "Implement Clip Operations",
+        "description": "Add UI and logic for splitting clips at playhead, deleting with shortcuts, context menu, and undo support.",
+        "details": "Use existing store methods deleteClip() and removeClip() from use-clip-store.ts. Add split logic: at playhead, create two clips from the original. Implement UI buttons and right-click context menu in timeline.tsx. Integrate with keyboard shortcuts from task 4. Add undo middleware (e.g., using Zustand undo plugin). Pseudo-code: const splitClip = (clipId) => { const clip = getClip(clipId); const splitTime = playhead; const leftClip = { ...clip, end: splitTime }; const rightClip = { ...clip, start: splitTime }; updateClips([leftClip, rightClip]); };",
+        "testStrategy": "Select a clip, use split button or shortcut to divide it at playhead. Test delete via shortcut or menu. Verify undo reverts operations. Check context menu appears on right-click.",
+        "priority": "high",
+        "dependencies": [
+          4,
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 7,
+        "title": "Implement Multi-Clip Preview",
+        "description": "Enable seamless playback across multiple clips, pre-loading adjacent clips, and handling multi-track compositing.",
+        "details": "In preview.tsx, modify the clip finding logic from lines 18 to detect the current clip based on playhead and track. Pre-load adjacent clips using Plyr's preload or buffer management. For multi-track, composite tracks where top overlays bottom (use CSS z-index or canvas compositing). Handle resolution differences by scaling. Pseudo-code: const currentClips = clips.filter(clip => playhead >= clip.start && playhead < clip.end); // sort by track for layering; preloadNextClip(); maintainPlaybackContinuity();",
+        "testStrategy": "Create a timeline with multiple clips on different tracks. Play through transitions and verify no loading delays. Check playback smoothness and correct compositing (e.g., overlays).",
+        "priority": "high",
+        "dependencies": [
+          5
+        ],
+        "status": "pending",
+        "subtasks": []
+      },
+      {
+        "id": 8,
+        "title": "Enhance Export with Real FFmpeg Progress",
+        "description": "Replace simulated progress with real FFmpeg parsing, add cancel functionality, and more resolution/quality options.",
+        "details": "In export-button.tsx, parse FFmpeg stderr for progress (e.g., 'frame=123 fps=30 time=00:00:05'). Emit Tauri events for updates. Add cancel by terminating the process. Support resolutions like source, 480p, 4K and quality presets. Pseudo-code: const runFFmpeg = () => { const process = spawn('ffmpeg', args); process.stderr.on('data', (data) => { const match = data.toString().match(/time=(\\d+:\\d+:\\d+)/); if (match) updateProgress(match[1]); }); // cancel: process.kill(); };",
+        "testStrategy": "Initiate an export and monitor progress bar for real updates. Test cancel button to stop export mid-process. Export at different resolutions and verify output quality/filesize.",
+        "priority": "medium",
+        "dependencies": [
+          7
+        ],
+        "status": "pending",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-10-29T13:49:49.725Z",
+      "updated": "2025-10-29T13:49:49.725Z",
+      "description": "Tasks for timeline context"
     }
   }
 }

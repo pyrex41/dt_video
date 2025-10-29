@@ -6,6 +6,7 @@ import { Header } from "./components/header"
 import { Timeline } from "./components/timeline"
 import { Preview } from "./components/preview"
 import { Controls } from "./components/controls"
+import { MediaLibrary } from "./components/media-library"
 import { useClipStore } from "./store/use-clip-store"
 import { Alert, AlertDescription } from "./components/ui/alert"
 import { AlertCircle, Info } from "lucide-react"
@@ -56,6 +57,10 @@ function App() {
         )}
 
         <div className="flex flex-1 min-h-0 overflow-hidden">
+          {/* Media Library Sidebar */}
+          <MediaLibrary />
+
+          {/* Main Content Area */}
           <div className="flex flex-1 flex-col min-h-0">
             <div className="flex-1 flex items-center justify-center p-8 bg-zinc-800 rounded-lg mx-6 mt-4 mb-4">
               <Preview />
