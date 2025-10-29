@@ -71,8 +71,20 @@ export function RecordButton() {
       recorder.onstop = async () => {
         try {
           console.log("[ClipForge] Recording stopped, processing...")
+
+          // Validate we have data
+          if (chunks.length === 0) {
+            throw new Error("No video data was recorded")
+          }
+
           const blob = new Blob(chunks, { type: "video/webm" })
           console.log("[ClipForge] Blob size:", blob.size, "bytes")
+
+          // Validate blob size
+          if (blob.size === 0) {
+            throw new Error("Recorded video is empty")
+          }
+
           const arrayBuffer = await blob.arrayBuffer()
           const data = Array.from(new Uint8Array(arrayBuffer))
 
@@ -86,29 +98,49 @@ export function RecordButton() {
           })
           console.log("[ClipForge] Recording saved to:", outputPath)
 
-          const duration = (Date.now() - startTime) / 1000
+          // Calculate actual duration with validation
+          const duration = Math.max((Date.now() - startTime) / 1000, 1) // At least 1 second
+
+          // Validate duration is reasonable (max 24 hours)
+          if (duration > 86400) {
+            throw new Error("Recording duration is invalid")
+          }
+
+          const lastClipEnd = clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0
 
           const newClip: Clip = {
             id: `clip_${Date.now()}`,
             path: outputPath,
             name: "Webcam Recording",
-            start: clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0,
-            end: (clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0) + duration,
+            start: lastClipEnd,
+            end: lastClipEnd + duration,
             duration,
             track: 0,
             trimStart: 0,
             trimEnd: duration,
           }
 
-          console.log("[ClipForge] Adding clip to store:", newClip)
-          addClip(newClip)
-          console.log("[ClipForge] Webcam recording complete!")
+          // Validate the clip before adding
+          if (
+            newClip.duration > 0 &&
+            newClip.duration <= 86400 &&
+            newClip.end > newClip.start &&
+            newClip.trimEnd > newClip.trimStart
+          ) {
+            console.log("[ClipForge] Adding clip to store:", newClip)
+            addClip(newClip)
+            console.log("[ClipForge] Webcam recording complete!")
+          } else {
+            throw new Error("Generated clip has invalid values")
+          }
+
           setIsRecording(false)
           setRecordingType(null)
           setActiveRecorder(null)
         } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
           console.error("[ClipForge] Error processing webcam recording:", err)
-          setError(`Failed to process webcam recording: ${err}`)
+          setError(`Failed to process webcam recording: ${errorMessage}`)
           setIsRecording(false)
           setRecordingType(null)
           setActiveRecorder(null)
@@ -168,8 +200,20 @@ export function RecordButton() {
       recorder.onstop = async () => {
         try {
           console.log("[ClipForge] Recording stopped, processing...")
+
+          // Validate we have data
+          if (chunks.length === 0) {
+            throw new Error("No video data was recorded")
+          }
+
           const blob = new Blob(chunks, { type: "video/webm" })
           console.log("[ClipForge] Blob size:", blob.size, "bytes")
+
+          // Validate blob size
+          if (blob.size === 0) {
+            throw new Error("Recorded video is empty")
+          }
+
           const arrayBuffer = await blob.arrayBuffer()
           const data = Array.from(new Uint8Array(arrayBuffer))
 
@@ -183,29 +227,49 @@ export function RecordButton() {
           })
           console.log("[ClipForge] Recording saved to:", outputPath)
 
-          const duration = (Date.now() - startTime) / 1000
+          // Calculate actual duration with validation
+          const duration = Math.max((Date.now() - startTime) / 1000, 1) // At least 1 second
+
+          // Validate duration is reasonable (max 24 hours)
+          if (duration > 86400) {
+            throw new Error("Recording duration is invalid")
+          }
+
+          const lastClipEnd = clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0
 
           const newClip: Clip = {
             id: `clip_${Date.now()}`,
             path: outputPath,
             name: "Screen Recording",
-            start: clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0,
-            end: (clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0) + duration,
+            start: lastClipEnd,
+            end: lastClipEnd + duration,
             duration,
             track: 0,
             trimStart: 0,
             trimEnd: duration,
           }
 
-          console.log("[ClipForge] Adding clip to store:", newClip)
-          addClip(newClip)
-          console.log("[ClipForge] Screen recording complete!")
+          // Validate the clip before adding
+          if (
+            newClip.duration > 0 &&
+            newClip.duration <= 86400 &&
+            newClip.end > newClip.start &&
+            newClip.trimEnd > newClip.trimStart
+          ) {
+            console.log("[ClipForge] Adding clip to store:", newClip)
+            addClip(newClip)
+            console.log("[ClipForge] Screen recording complete!")
+          } else {
+            throw new Error("Generated clip has invalid values")
+          }
+
           setIsRecording(false)
           setRecordingType(null)
           setActiveRecorder(null)
         } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : String(err)
           console.error("[ClipForge] Error processing screen recording:", err)
-          setError(`Failed to process screen recording: ${err}`)
+          setError(`Failed to process screen recording: ${errorMessage}`)
           setIsRecording(false)
           setRecordingType(null)
           setActiveRecorder(null)

@@ -14,9 +14,11 @@ export function ResetButton() {
       setIsResetting(true)
       await resetWorkspace()
       setShowConfirm(false)
+
+      // Reload the page to ensure clean state
+      window.location.reload()
     } catch (error) {
       console.error("Failed to reset workspace:", error)
-    } finally {
       setIsResetting(false)
     }
   }

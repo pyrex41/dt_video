@@ -11,46 +11,14 @@ import { Alert, AlertDescription } from "./components/ui/alert"
 import { AlertCircle, Info } from "lucide-react"
 
 function App() {
-  const { error, setError, loadState } = useClipStore()
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-
-  const saveWorkspace = async (state: any) => {
-    try {
-      const stateToSave = {
-        clips: state.clips.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          path: c.path,
-          start: c.start,
-          end: c.end,
-          duration: c.duration,
-          trimStart: c.trimStart || 0,
-          trimEnd: c.trimEnd || c.duration || 0,
-        })),
-        playhead: state.playhead,
-        is_playing: state.isPlaying,
-        zoom: state.zoom,
-        selected_clip_id: state.selectedClipId,
-        export_progress: state.exportProgress,
-      }
-      await invoke("save_workspace", { stateJson: JSON.stringify(stateToSave) })
-      console.log("Workspace saved with", stateToSave.clips.length, "clips")
-    } catch (err) {
-      console.error("Failed to save workspace:", err)
-    }
-  }
-
-  const debouncedSave = (state: any) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-    saveTimeoutRef.current = setTimeout(() => {
-      saveWorkspace(state)
-    }, 2000) // 2 second debounce
-  }
+  const { error, setError, hydrateFromWorkspace, isHydrated } = useClipStore()
 
   useEffect(() => {
-    const checkFFmpeg = async () => {
+    const initialize = async () => {
+      // First, hydrate from saved workspace with validation
+      await hydrateFromWorkspace()
+
+      // Then check FFmpeg
       try {
         const version = await invoke<string>("check_ffmpeg")
         console.log("FFmpeg version:", version)
@@ -60,45 +28,20 @@ function App() {
       }
     }
 
-    const loadWorkspace = async () => {
-      try {
-        const workspaceJson = await invoke<string>("load_workspace")
-        const state = JSON.parse(workspaceJson)
-        // Add defaults for missing fields in clips
-        const clipsWithDefaults = state.clips.map((clip: any) => ({
-          ...clip,
-          track: clip.track || 0,
-          trimStart: clip.trimStart || 0,
-          trimEnd: clip.trimEnd || clip.duration || 0,
-          resolution: clip.resolution || undefined,
-          fps: clip.fps || undefined,
-        }))
-        loadState({
-          ...state,
-          clips: clipsWithDefaults,
-          isPlaying: state.is_playing || false, // match field name
-        })
-        console.log("Loaded workspace with", clipsWithDefaults.length, "clips")
-      } catch (err) {
-        console.log("No saved workspace found, starting fresh")
-      }
-    }
+    initialize()
+  }, [setError, hydrateFromWorkspace])
 
-    checkFFmpeg()
-    loadWorkspace()
-
-    // Subscribe to store changes for auto-save
-    const unsubscribe = useClipStore.subscribe((state) => {
-      debouncedSave(state)
-    })
-
-    return () => {
-      unsubscribe()
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-    }
-  }, [setError, loadState])
+  // Show loading state while hydrating
+  if (!isHydrated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black text-white">
+        <div className="text-center">
+          <div className="mb-4 text-lg text-zinc-300">Loading workspace...</div>
+          <div className="text-sm text-zinc-500">Validating saved clips and settings</div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-white p-8">

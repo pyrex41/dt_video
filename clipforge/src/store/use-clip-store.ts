@@ -1,6 +1,8 @@
 import { create } from "zustand"
+import { subscribeWithSelector } from "zustand/middleware"
 import { invoke } from "@tauri-apps/api/tauri"
 import type { Clip } from "../types/clip"
+import { debouncedSaveWorkspace, loadWorkspace } from "../lib/workspace-persistence"
 
 interface ClipStore {
   clips: Clip[]
@@ -10,6 +12,7 @@ interface ClipStore {
   selectedClipId: string | null
   error: string | null
   exportProgress: number
+  isHydrated: boolean
 
   addClip: (clip: Clip) => void
   updateClip: (id: string, updates: Partial<Clip>) => void
@@ -26,9 +29,11 @@ interface ClipStore {
   resetWorkspace: () => Promise<void>
   loadState: (state: Partial<ClipStore>) => void
   trimClip: (id: string, start: number, end: number) => Promise<void>
+  hydrateFromWorkspace: () => Promise<void>
 }
 
-export const useClipStore = create<ClipStore>((set, get) => ({
+export const useClipStore = create<ClipStore>()(
+  subscribeWithSelector((set, get) => ({
   clips: [],
   playhead: 0,
   isPlaying: false,
@@ -36,6 +41,7 @@ export const useClipStore = create<ClipStore>((set, get) => ({
   selectedClipId: null,
   error: null,
   exportProgress: 0,
+  isHydrated: false,
 
   addClip: (clip) =>
     set((state) => ({
@@ -125,6 +131,31 @@ export const useClipStore = create<ClipStore>((set, get) => ({
   },
 
   loadState: (state) => set(state),
+
+  hydrateFromWorkspace: async () => {
+    try {
+      const workspace = await loadWorkspace()
+      if (workspace) {
+        set({
+          clips: workspace.clips,
+          playhead: workspace.playhead,
+          isPlaying: workspace.is_playing,
+          zoom: workspace.zoom,
+          selectedClipId: workspace.selected_clip_id,
+          exportProgress: workspace.export_progress,
+          isHydrated: true,
+        })
+        console.log("[store] Hydrated from workspace")
+      } else {
+        set({ isHydrated: true })
+        console.log("[store] No workspace to hydrate from")
+      }
+    } catch (error) {
+      console.error("[store] Failed to hydrate from workspace:", error)
+      set({ isHydrated: true }) // Mark as hydrated even on error
+    }
+  },
+
   trimClip: async (id, trimStart, trimEnd) => {
     const state = get()
     const clip = state.clips.find(c => c.id === id)
@@ -188,4 +219,26 @@ export const useClipStore = create<ClipStore>((set, get) => ({
       throw err
     }
   },
-}))
+})))
+
+// Auto-save workspace when relevant state changes
+useClipStore.subscribe(
+  (state) => ({
+    clips: state.clips,
+    playhead: state.playhead,
+    is_playing: state.isPlaying,
+    zoom: state.zoom,
+    selected_clip_id: state.selectedClipId,
+    export_progress: state.exportProgress,
+  }),
+  (workspace) => {
+    // Only save if the store has been hydrated to avoid overwriting on initial load
+    if (useClipStore.getState().isHydrated) {
+      debouncedSaveWorkspace(workspace)
+    }
+  },
+  {
+    // Save on any change to these fields
+    equalityFn: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  }
+)
