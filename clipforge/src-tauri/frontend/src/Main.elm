@@ -28,6 +28,7 @@ port module Main exposing (main)
 
 import Browser
 import Browser.Events
+import Time
 import Canvas exposing (Renderable, Shape)
 import Canvas.Settings exposing (fill, stroke)
 import Canvas.Settings.Advanced exposing (transform, translate)
@@ -179,6 +180,7 @@ type Msg
     | MouseMove Float Float -- x, y position (global coordinates)
     | MouseUp Float Float -- x, y position (global coordinates)
     | SelectClip (Maybe String) -- Select a clip (Just clipId) or deselect all (Nothing)
+    | SelectAllClips -- Select all clips on timeline
     | PlayVideo
     | PauseVideo
     | TogglePlayPause -- Toggle play/pause state
@@ -206,6 +208,9 @@ type Msg
     | MediaLibraryMsg MediaLibrary.Msg -- Messages from media library
     | TimelineDrop Encode.Value -- Drop data on timeline
     | ThumbnailGenerated Encode.Value -- Thumbnail generated for clip
+    | DragFrameUpdate -- RequestAnimationFrame callback for smooth drag updates
+    | VideoPlayEvent -- Video started playing (from Plyr)
+    | VideoPauseEvent -- Video paused (from Plyr)
     | NoOp
 
 
@@ -290,9 +295,16 @@ update msg model =
                 -- Apply snap-to-grid
                 snappedTime =
                     snapToGrid time
+
+                -- Clamp to valid range
+                maxTime =
+                    getTimelineDuration model
+
+                clampedTime =
+                    clamp 0 maxTime snappedTime
             in
-            ( { model | playhead = snappedTime }
-            , setVideoTime snappedTime
+            ( { model | playhead = clampedTime }
+            , setVideoTime clampedTime
             )
 
         MouseDown canvasX canvasY ->
@@ -359,21 +371,22 @@ update msg model =
                                 )
 
         MouseMove pageX pageY ->
+            -- Update mouse position for drag calculations
+            ( { model | mousePos = ( pageX, pageY ) }
+            , Cmd.none
+            )
+
+        DragFrameUpdate ->
+            -- Perform drag calculations at 60fps using current mouse position
             case model.dragging of
                 Just DraggingPlayhead ->
-                    -- Update playhead position while dragging
-                    -- We need to convert from page coordinates to canvas coordinates
-                    -- For now, we'll use the delta approach since we don't have canvas offset
                     let
-                        ( oldX, oldY ) =
+                        ( pageX, _ ) =
                             model.mousePos
 
-                        deltaX =
-                            pageX - oldX
-
-                        -- Calculate new playhead position
+                        -- Calculate new playhead position directly from mouse X
                         newPlayhead =
-                            model.playhead + (deltaX / model.pixelsPerSecond)
+                            pageX / model.pixelsPerSecond
 
                         -- Apply snap-to-grid
                         snappedPlayhead =
@@ -388,72 +401,62 @@ update msg model =
                     in
                     ( { model
                         | playhead = clampedPlayhead
-                        , mousePos = ( pageX, pageY )
                       }
                     , setVideoTime clampedPlayhead
                     )
 
                 Just (DraggingClip clipId offsetX) ->
-                    -- Update clip position while dragging
-                    -- We use the delta from the previous mouse position
                     let
-                        ( oldX, oldY ) =
+                        ( pageX, _ ) =
                             model.mousePos
 
-                        deltaX =
-                            pageX - oldX
+                        -- Calculate new start time directly from mouse position
+                        newStartTime =
+                            (pageX - offsetX) / model.pixelsPerSecond
+
+                        -- Apply snap-to-grid
+                        snappedStartTime =
+                            snapToGrid newStartTime
+
+                        -- Ensure clip doesn't go negative
+                        clampedStartTime =
+                            max 0 snappedStartTime
 
                         -- Get current clip to update it
                         updateClip clip =
                             if clip.id == clipId then
-                                let
-                                    -- Calculate new start time
-                                    newStartTime =
-                                        clip.startTime + (deltaX / model.pixelsPerSecond)
-
-                                    -- Apply snap-to-grid
-                                    snappedStartTime =
-                                        snapToGrid newStartTime
-
-                                    -- Ensure clip doesn't go negative
-                                    clampedStartTime =
-                                        max 0 snappedStartTime
-                                in
                                 { clip | startTime = clampedStartTime }
-
                             else
                                 clip
                     in
                     ( { model
                         | clips = List.map updateClip model.clips
-                        , mousePos = ( pageX, pageY )
                       }
                     , Cmd.none
                     )
 
                 Just (DraggingTrimStart clipId) ->
-                    -- Update trim start position while dragging
                     let
-                        ( oldX, oldY ) =
+                        ( pageX, _ ) =
                             model.mousePos
 
-                        deltaX =
-                            pageX - oldX
+                        -- Find the clip to get its timeline position
+                        currentClip =
+                            model.clips
+                                |> List.filter (\c -> c.id == clipId)
+                                |> List.head
 
-                        -- Update clip's trim start
+                        -- Calculate new trim start relative to clip start
                         updateClip clip =
                             if clip.id == clipId then
                                 let
-                                    -- Calculate new trim start (delta in seconds)
-                                    deltaTime =
-                                        deltaX / model.pixelsPerSecond
-
-                                    newTrimStart =
-                                        clip.trimStart + deltaTime
+                                    -- Convert mouse position to time relative to clip start
+                                    mouseTime =
+                                        (pageX - clip.startTime * model.pixelsPerSecond) / model.pixelsPerSecond
 
                                     -- Apply snap-to-grid
                                     snappedTrimStart =
-                                        snapToGrid newTrimStart
+                                        snapToGrid mouseTime
 
                                     -- Constraints:
                                     -- 1. trimStart >= 0 (can't go before clip start)
@@ -467,11 +470,6 @@ update msg model =
                                 clip
 
                         -- Find the clip to get its current trim values for status message
-                        currentClip =
-                            model.clips
-                                |> List.filter (\c -> c.id == clipId)
-                                |> List.head
-
                         statusMsg =
                             case currentClip of
                                 Just clip ->
@@ -482,35 +480,33 @@ update msg model =
                     in
                     ( { model
                         | clips = List.map updateClip model.clips
-                        , mousePos = ( pageX, pageY )
                         , statusMessage = statusMsg
                       }
                     , Cmd.none
                     )
 
                 Just (DraggingTrimEnd clipId) ->
-                    -- Update trim end position while dragging
                     let
-                        ( oldX, oldY ) =
+                        ( pageX, _ ) =
                             model.mousePos
 
-                        deltaX =
-                            pageX - oldX
+                        -- Find the clip to get its timeline position
+                        currentClip =
+                            model.clips
+                                |> List.filter (\c -> c.id == clipId)
+                                |> List.head
 
-                        -- Update clip's trim end
+                        -- Calculate new trim end relative to clip start
                         updateClip clip =
                             if clip.id == clipId then
                                 let
-                                    -- Calculate new trim end (delta in seconds)
-                                    deltaTime =
-                                        deltaX / model.pixelsPerSecond
-
-                                    newTrimEnd =
-                                        clip.trimEnd + deltaTime
+                                    -- Convert mouse position to time relative to clip start
+                                    mouseTime =
+                                        (pageX - clip.startTime * model.pixelsPerSecond) / model.pixelsPerSecond
 
                                     -- Apply snap-to-grid
                                     snappedTrimEnd =
-                                        snapToGrid newTrimEnd
+                                        snapToGrid mouseTime
 
                                     -- Constraints:
                                     -- 1. trimEnd > trimStart + 0.5 (minimum 0.5s visible duration)
@@ -524,11 +520,6 @@ update msg model =
                                 clip
 
                         -- Find the clip to get its current trim values for status message
-                        currentClip =
-                            model.clips
-                                |> List.filter (\c -> c.id == clipId)
-                                |> List.head
-
                         statusMsg =
                             case currentClip of
                                 Just clip ->
@@ -539,17 +530,14 @@ update msg model =
                     in
                     ( { model
                         | clips = List.map updateClip model.clips
-                        , mousePos = ( pageX, pageY )
                         , statusMessage = statusMsg
                       }
                     , Cmd.none
                     )
 
                 Nothing ->
-                    -- Just update mouse position for hover detection
-                    ( { model | mousePos = ( pageX, pageY ) }
-                    , Cmd.none
-                    )
+                    -- No dragging, do nothing
+                    ( model, Cmd.none )
 
         MouseUp x y ->
             -- Check if this was a click (not a drag) by comparing to clickStartPos
@@ -739,16 +727,29 @@ update msg model =
             , Cmd.none
             )
 
-        PlayVideo ->
-            if model.isPlaying then
-                ( { model | isPlaying = False }
-                , pauseVideo ()
-                )
+        SelectAllClips ->
+            let
+                -- Select the first clip if there are any clips
+                newSelectedId =
+                    List.head model.clips |> Maybe.map .id
 
-            else
-                ( { model | isPlaying = True }
-                , playVideo ()
-                )
+                statusMsg =
+                    if List.isEmpty model.clips then
+                        Just ( Warning, "No clips to select" )
+                    else
+                        Just ( Info, "All clips selected" )
+            in
+            ( { model
+                | selectedClipId = newSelectedId
+                , statusMessage = statusMsg
+              }
+            , Cmd.none
+            )
+
+        PlayVideo ->
+            ( { model | isPlaying = True }
+            , playVideo ()
+            )
 
         PauseVideo ->
             ( { model | isPlaying = False }
@@ -1209,6 +1210,16 @@ update msg model =
                     , Cmd.none
                     )
 
+        VideoPlayEvent ->
+            ( { model | isPlaying = True }
+            , Cmd.none
+            )
+
+        VideoPauseEvent ->
+            ( { model | isPlaying = False }
+            , Cmd.none
+            )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -1426,16 +1437,29 @@ clipToMediaLibraryClip clip =
 
 keyDecoder : Decoder Msg
 keyDecoder =
-    Decode.field "key" Decode.string
+    Decode.map3 KeyEvent
+        (Decode.field "key" Decode.string)
+        (Decode.field "ctrlKey" Decode.bool)
+        (Decode.field "metaKey" Decode.bool)
         |> Decode.andThen toKeyMsg
 
 
 
--- Convert key string to appropriate message
+-- Key event type for modifier key handling
 
 
-toKeyMsg : String -> Decoder Msg
-toKeyMsg key =
+type alias KeyEvent =
+    { key : String
+    , ctrlKey : Bool
+    , metaKey : Bool
+    }
+
+
+-- Convert key event to appropriate message
+
+
+toKeyMsg : KeyEvent -> Decoder Msg
+toKeyMsg { key, ctrlKey, metaKey } =
     case key of
         " " ->
             -- Space: Toggle play/pause
@@ -1468,6 +1492,17 @@ toKeyMsg key =
         "Backspace" ->
             -- Backspace: Also remove selected clip
             Decode.succeed RemoveSelectedClip
+
+        "Escape" ->
+            -- Escape: Deselect all clips
+            Decode.succeed (SelectClip Nothing)
+
+        "a" ->
+            -- Cmd/Ctrl+A: Select all clips
+            if ctrlKey || metaKey then
+                Decode.succeed (SelectAllClips)
+            else
+                Decode.fail "Not select all"
 
         _ ->
             -- Unhandled key: fail the decoder (no message)
@@ -1631,6 +1666,12 @@ port requestThumbnails : List String -> Cmd msg
 port thumbnailGenerated : (Encode.Value -> msg) -> Sub msg
 
 
+port videoPlayEvent : (Float -> msg) -> Sub msg
+
+
+port videoPauseEvent : (Float -> msg) -> Sub msg
+
+
 
 -- SUBSCRIPTIONS
 
@@ -1647,6 +1688,8 @@ subscriptions model =
             , recordingComplete RecordingComplete
             , timelineDrop TimelineDrop
             , thumbnailGenerated ThumbnailGenerated
+            , videoPlayEvent (\_ -> VideoPlayEvent)
+            , videoPauseEvent (\_ -> VideoPauseEvent)
             , Browser.Events.onKeyDown keyDecoder -- Keyboard shortcuts
             ]
 
@@ -1656,6 +1699,7 @@ subscriptions model =
                 Just _ ->
                     [ Browser.Events.onMouseMove mouseMoveDecoder
                     , Browser.Events.onMouseUp mouseUpDecoder
+                    , Browser.Events.onAnimationFrame (\_ -> DragFrameUpdate)
                     ]
 
                 Nothing ->
