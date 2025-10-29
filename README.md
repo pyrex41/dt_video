@@ -1,6 +1,6 @@
 # ClipForge
 
-ClipForge is a desktop video editing application built with Tauri, React, and Preact. It provides a modern interface for importing, trimming, arranging, and exporting video clips. The application supports multi-track timelines, preview playback, and workspace persistence.
+ClipForge is a desktop video editing application built with Tauri and Preact (React-compatible). It provides a modern interface for importing, trimming, arranging, and exporting video clips. The application supports multi-track timelines, preview playback, and workspace persistence.
 
 ## Features
 
@@ -75,9 +75,9 @@ pnpm run tauri
 
 ### Running in Development Mode
 
-The project supports two frontend configurations: React and Elm. By default, it uses the React frontend.
+The project supports two frontend configurations: Preact (React-compatible) and Elm. By default, it uses the Preact frontend.
 
-#### React Frontend (Default)
+#### Preact Frontend (Default)
 ```bash
 # Start the development server
 pnpm run dev
@@ -85,7 +85,7 @@ pnpm run dev
 
 The application will be available at `http://localhost:1420`.
 
-#### Tauri Development Mode (React)
+#### Tauri Development Mode (Preact)
 ```bash
 # Start Tauri development with React frontend
 pnpm run tauri:react
@@ -113,7 +113,7 @@ pnpm run tauri:elm
 ```
 clipforge/
 ├── public/                 # Static assets (logos, favicon)
-├── src/                    # React/Preact frontend
+├── src/                    # Preact (React-compatible) frontend
 │   ├── components/         # UI components
 │   │   ├── controls.tsx    # Playback and timeline controls
 │   │   ├── header.tsx      # Application header
@@ -132,7 +132,7 @@ clipforge/
 
 ### Frontend Architecture
 
-#### React/Preact Frontend
+#### Preact Frontend
 - State Management: Zustand for global application state
 - UI Components: Custom components with Tailwind CSS styling
 - Video Player: Plyr for preview playback
@@ -157,7 +157,7 @@ The Tauri backend handles:
 
 ### Building the Web Application
 ```bash
-# Build React frontend
+# Build Preact frontend
 pnpm run build
 ```
 
@@ -336,7 +336,7 @@ Common Tauri issues:
 
 ## Architecture
 
-### Frontend (React/Preact)
+### Frontend (Preact)
 
 State Management:
 - Global state managed with Zustand

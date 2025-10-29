@@ -70,38 +70,58 @@ This PRD documents the implemented recording and import features for the Clipfor
 
 ### 4. File Import via Dialog
 **Priority**: High
+**Status**: ⚠️ PARTIALLY IMPLEMENTED (single file only)
 **Description**: Import video files using native file dialog.
 
 **Acceptance Criteria**:
 - [x] File picker dialog for video selection
 - [x] Support for common video formats (MP4, MOV, WebM, AVI)
 - [x] Automatic import and timeline addition
-- [ ] Support for multiple files at once
+- [ ] **Support for multiple files at once** (select multiple in file picker)
 - [x] Error handling for unsupported formats
+- [ ] Batch import progress indicator (when importing multiple files)
 
 **Technical Details**:
 - Uses Tauri `@tauri-apps/api/dialog` for file selection
 - Integrates with existing `import_file` command
-- Single file import only (multi-file planned)
+- **TODO**: Enable `multiple: true` in dialog options
+- **TODO**: Loop through selected files and import each
 - Handles file validation before import
 
+**Current Limitation**:
+- Only supports single file import
+- Need to add multi-file support to file picker dialog
+
 ### 5. Media Library Panel
-**Priority**: Medium
+**Priority**: High (CORE FEATURE - not stretch goal)
+**Status**: ❌ NOT IMPLEMENTED
 **Description**: Sidebar panel showing all imported media with thumbnails and metadata.
 
 **Acceptance Criteria**:
-- [ ] Collapsible sidebar with media list
-- [ ] Thumbnail previews for each clip
-- [ ] Metadata display (duration, resolution, size)
+- [ ] Collapsible sidebar with media list (left or right side)
+- [ ] **Thumbnail previews for each clip** (first frame or mid-point)
+- [ ] **Metadata display for each clip**:
+  - [ ] Duration (MM:SS format)
+  - [ ] Resolution (e.g., "1920x1080")
+  - [ ] File size (e.g., "45.2 MB")
+  - [ ] Format/codec info
 - [ ] Drag clips from library to timeline
-- [ ] Delete clips from library
-- [ ] Search/filter functionality
+- [ ] Delete clips from library (with confirmation)
+- [ ] Search/filter functionality (by name, duration, resolution)
+- [ ] Clip preview on hover (optional)
 
 **Technical Details**:
-- Planned: New MediaLibrary component
-- Generate thumbnails using FFmpeg (add Rust command if needed)
-- Store metadata in clip objects
+- New MediaLibrary component (sidebar)
+- Generate thumbnails using FFmpeg:
+  ```bash
+  ffmpeg -i input.mp4 -ss 00:00:01 -vframes 1 thumbnail.jpg
+  ```
+- Store metadata in clip objects (extend Clip interface if needed)
 - Integrate with existing store and timeline
+- Thumbnail cache in `clips/thumbnails/` directory
+
+**Implementation Priority**:
+This is a CORE feature from the requirements list, not a stretch goal. Should be implemented after timeline bugs are fixed.
 
 ### 6. Audio Capture Integration
 **Priority**: Medium

@@ -2,7 +2,7 @@
 
 ClipForge now supports **two frontend implementations** that share the same Tauri Rust backend:
 
-1. **React/Preact Frontend** (Default) - Located at `clipforge/src/`
+1. **Preact Frontend** (Default) - Located at `clipforge/src/`
 2. **Elm Frontend** - Located at `clipforge/src-tauri/frontend/`
 
 Both frontends provide the same video editing functionality but use different technologies.
@@ -31,7 +31,7 @@ pnpm run use-react
 
 ### Option 1: Run with Tauri (Desktop App)
 
-**React Frontend:**
+**Preact Frontend:**
 ```bash
 cd clipforge
 pnpm run tauri:react
@@ -49,7 +49,7 @@ pnpm run tauri:elm
 
 ### Option 2: Run Frontend Only (Browser)
 
-**React Frontend:**
+**Preact Frontend:**
 ```bash
 cd clipforge
 pnpm run dev
@@ -89,7 +89,7 @@ The project uses multiple Tauri configuration files:
 
 ## Frontend Comparison
 
-### React/Preact Frontend
+### Preact Frontend
 
 **Location:** `clipforge/src/`
 **Port:** 1420
@@ -103,10 +103,11 @@ The project uses multiple Tauri configuration files:
 - Plyr (video player)
 
 **Pros:**
-- Familiar React ecosystem
+- Familiar React ecosystem (Preact-compatible)
 - Rich component libraries
 - TypeScript support
 - Fast development with HMR
+- Smaller bundle size than React
 
 ### Elm Frontend
 
@@ -227,7 +228,7 @@ pnpm run tauri dev
 
 ### Building for Production
 
-**React:**
+**Preact:**
 ```bash
 pnpm run use-react
 pnpm run tauri build
@@ -271,7 +272,7 @@ cd src-tauri/frontend
 npx elm make src/Main.elm --output=/dev/null
 ```
 
-### React Build Errors
+### Preact Build Errors
 
 ```bash
 cd clipforge

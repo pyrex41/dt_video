@@ -1,7 +1,7 @@
 ## React Frontend PRD
 
 ### Objective
-Build a fast, responsive React frontend for ClipForge, using `react-konva` for a canvas-based timeline, `Zustand` for state management, and `Plyr` for video preview. Integrate with the Tauri Rust backend to deliver a trim-only editor MVP and add recording and multi-track features for the final submission.
+Build a fast, responsive Preact (React-compatible) frontend for ClipForge, using `react-konva` for a canvas-based timeline, `Zustand` for state management, and `Plyr` for video preview. Integrate with the Tauri Rust backend to deliver a trim-only editor MVP and add recording and multi-track features for the final submission.
 
 ### Scope
 - **MVP**: Video import (drag-and-drop/file picker), single-track Konva.js timeline (draggable clips, playhead), trim functionality, MP4 export, basic UI with `shadcn/ui`.
@@ -46,7 +46,7 @@ Build a fast, responsive React frontend for ClipForge, using `react-konva` for a
    - Responsive UI during export.
 
 ### Technical Stack
-- **React**: v18 for component-based UI.
+- **Preact**: v10 for component-based UI (React-compatible).
 - **react-konva**: v18 for canvas-based timeline.
 - **Zustand**: v4 for lightweight state management.
 - **Plyr**: v3 for video preview (15KB, keyboard shortcuts).
@@ -218,6 +218,6 @@ Build a fast, responsive React frontend for ClipForge, using `react-konva` for a
   ```
 
 ### Deliverables
-- React frontend code in `src-tauri/frontend/`.
+- Preact frontend code in `clipforge/src/`.
 - Demo video showing import, timeline, trim, export, and recording.
 - UI built with `shadcn/ui` components.
