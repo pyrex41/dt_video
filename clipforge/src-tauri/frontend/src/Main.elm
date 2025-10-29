@@ -138,8 +138,9 @@ type alias Model =
     , selectedClipId : Maybe String -- ID of currently selected clip
     , clickStartPos : Maybe ( Float, Float ) -- Position where mouse down occurred (for click vs drag detection)
     , recordingMenuOpen : Bool -- Whether the recording dropdown menu is open
-     , recordingState : Maybe RecordingType -- Current recording state (if recording)
-     , mediaLibrary : MediaLibrary.Model -- Media library state
+      , recordingState : Maybe RecordingType -- Current recording state (if recording)
+      , mediaLibrary : MediaLibrary.Model -- Media library state
+    , contextMenu : Maybe ( Float, Float, String ) -- (x, y, clipId) for context menu position
     }
 
 
@@ -160,8 +161,9 @@ init _ =
       , selectedClipId = Nothing
       , clickStartPos = Nothing
       , recordingMenuOpen = False
-       , recordingState = Nothing
-       , mediaLibrary = MediaLibrary.init
+        , recordingState = Nothing
+        , mediaLibrary = MediaLibrary.init
+      , contextMenu = Nothing
       }
     , Cmd.none
     )
@@ -211,6 +213,8 @@ type Msg
     | DragFrameUpdate -- RequestAnimationFrame callback for smooth drag updates
     | VideoPlayEvent -- Video started playing (from Plyr)
     | VideoPauseEvent -- Video paused (from Plyr)
+    | ShowContextMenuAtPosition Float Float -- x, y for context menu position
+    | HideContextMenu -- Hide the context menu
     | NoOp
 
 
@@ -1290,6 +1294,21 @@ update msg model =
             , Cmd.none
             )
 
+        ShowContextMenuAtPosition x y ->
+            case findClipAtPosition x y model of
+                Just (clip, _) ->
+                    ( { model | contextMenu = Just ( x, y, clip.id ) }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none ) -- Don't show menu if no clip
+
+        HideContextMenu ->
+            ( { model | contextMenu = Nothing }
+            , Cmd.none
+            )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -1833,7 +1852,9 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
     div
-        [ class "flex flex-col min-h-screen bg-gray-900 text-white" ]
+        [ class "flex flex-col min-h-screen bg-gray-900 text-white"
+        , Html.Events.onClick HideContextMenu -- Hide context menu on any click
+        ]
         [ viewHeader model
         , viewStatusMessage model
         , viewMainContent model
@@ -2086,6 +2107,7 @@ viewCanvas model =
                         "pointer"
                 )
             , Html.Events.on "mousedown" (canvasClickDecoder canvasWidth)
+            , Html.Events.on "contextmenu" (canvasContextMenuDecoder canvasWidth)
             ]
             (renderTimeline model canvasHeight)
         , div
@@ -2093,12 +2115,20 @@ viewCanvas model =
             [ text ("Playhead: " ++ formatDuration model.playhead)
             , text ("Duration: " ++ formatDuration timelineDuration)
             ]
+        , viewContextMenu model
         ]
 
 
 canvasClickDecoder : Float -> Decoder Msg
 canvasClickDecoder canvasWidth =
     Decode.map2 MouseDown
+        (Decode.field "offsetX" Decode.float)
+        (Decode.field "offsetY" Decode.float)
+
+
+canvasContextMenuDecoder : Float -> Decoder Msg
+canvasContextMenuDecoder canvasWidth =
+    Decode.map2 (\x y -> ShowContextMenuAtPosition (x + 10) (y + 10)) -- Offset slightly for better positioning
         (Decode.field "offsetX" Decode.float)
         (Decode.field "offsetY" Decode.float)
 
@@ -2497,13 +2527,51 @@ formatDuration seconds =
     String.fromInt mins ++ ":" ++ String.padLeft 2 '0' (String.fromInt secs)
 
 
+viewContextMenu : Model -> Html Msg
+viewContextMenu model =
+    case model.contextMenu of
+        Just ( x, y, clipId ) ->
+            div
+                [ class "fixed bg-gray-700 rounded-lg shadow-lg z-50 border border-gray-600 overflow-hidden"
+                , style "left" (String.fromFloat x ++ "px")
+                , style "top" (String.fromFloat y ++ "px")
+                , Html.Events.stopPropagationOn "click" (Decode.succeed ( NoOp, True )) -- Prevent click from bubbling
+                ]
+                [ button
+                    [ class "w-full text-left px-4 py-2 hover:bg-gray-600 text-white flex items-center gap-2 transition-colors duration-200"
+                    , onClick (SplitClipAtPlayhead clipId)
+                    ]
+                    [ text "✂️ Split at Playhead" ]
+                , button
+                    [ class "w-full text-left px-4 py-2 hover:bg-gray-600 text-white flex items-center gap-2 transition-colors duration-200"
+                    , onClick (SelectClip (Just clipId))
+                    , Html.Events.onClick HideContextMenu
+                    ]
+                    [ text "🎯 Select Clip" ]
+                , button
+                    [ class "w-full text-left px-4 py-2 hover:bg-gray-600 text-white flex items-center gap-2 transition-colors duration-200"
+                    , onClick RemoveSelectedClip
+                    ]
+                    [ text "🗑️ Delete Clip" ]
+                ]
+
+        Nothing ->
+            text ""
+
+
 viewPreview : Model -> Html Msg
 viewPreview model =
     let
-        -- Find the clip at the current playhead position
-        currentClip =
+        -- Find all clips at the current playhead position
+        clipsAtPlayhead =
             model.clips
                 |> List.filter (\c -> model.playhead >= c.startTime && model.playhead < (c.startTime + c.duration))
+
+        -- For multi-track compositing, use the clip on the highest track (top layer)
+        currentClip =
+            clipsAtPlayhead
+                |> List.sortBy .track
+                |> List.reverse -- Higher track numbers first
                 |> List.head
     in
     div

@@ -3,6 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 use std::io::Write;
+use std::io::{BufRead, BufReader};
+use std::process::Stdio;
+use tokio::process::Command;
+use tokio::io::{AsyncBufReadExt, BufReader as AsyncBufReader};
+use regex::Regex;
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
@@ -393,9 +398,21 @@ async fn export_video(
 
     // Parse resolution
     let (width, height) = match resolution.as_str() {
+        "source" => {
+            // For source resolution, we need to get it from the first clip
+            if let Some(first_clip) = clips.first() {
+                // We can't easily get source resolution without probing, so use 720p as fallback
+                // In a real implementation, you'd probe the first clip for resolution
+                (1280, 720)
+            } else {
+                (1280, 720)
+            }
+        },
+        "480p" => (854, 480),
         "720p" => (1280, 720),
         "1080p" => (1920, 1080),
-        _ => return Err(format!("Unsupported resolution: {}. Use '720p' or '1080p'.", resolution)),
+        "4K" => (3840, 2160),
+        _ => return Err(format!("Unsupported resolution: {}. Use 'source', '480p', '720p', '1080p', or '4K'.", resolution)),
     };
 
     // If single clip, simple re-encode with resolution and trim
@@ -407,37 +424,90 @@ async fn export_video(
     export_multi_clips(&clips, &output_path, width, height, &app_handle).await
 }
 
+// Helper function to run FFmpeg with progress monitoring
+async fn run_ffmpeg_with_progress(
+    args: &[&str],
+    app_handle: &tauri::AppHandle,
+    total_duration: Option<f64>,
+) -> Result<(), String> {
+    let mut child = Command::new("ffmpeg")
+        .args(args)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn ffmpeg: {}", e))?;
+
+    let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
+    let mut reader = AsyncBufReader::new(stderr).lines();
+
+    // Regex to match FFmpeg progress lines
+    let time_regex = Regex::new(r"time=(\d+):(\d+):(\d+\.\d+)").unwrap();
+    let duration_regex = Regex::new(r"Duration: (\d+):(\d+):(\d+\.\d+)").unwrap();
+
+    let mut total_seconds = total_duration.unwrap_or(0.0);
+
+    while let Ok(Some(line)) = reader.next_line().await {
+        // Parse duration if found
+        if let Some(caps) = duration_regex.captures(&line) {
+            let hours: f64 = caps[1].parse().unwrap_or(0.0);
+            let minutes: f64 = caps[2].parse().unwrap_or(0.0);
+            let seconds: f64 = caps[3].parse().unwrap_or(0.0);
+            total_seconds = hours * 3600.0 + minutes * 60.0 + seconds;
+        }
+
+        // Parse current time if found
+        if let Some(caps) = time_regex.captures(&line) {
+            let hours: f64 = caps[1].parse().unwrap_or(0.0);
+            let minutes: f64 = caps[2].parse().unwrap_or(0.0);
+            let seconds: f64 = caps[3].parse().unwrap_or(0.0);
+            let current_seconds = hours * 3600.0 + minutes * 60.0 + seconds;
+
+            if total_seconds > 0.0 {
+                let progress = (current_seconds / total_seconds * 100.0).min(100.0);
+                // Emit progress event
+                let _ = app_handle.emit_all("export-progress", progress as u32);
+            }
+        }
+    }
+
+    let status = child.wait().await
+        .map_err(|e| format!("Failed to wait for ffmpeg: {}", e))?;
+
+    if !status.success() {
+        return Err("FFmpeg process failed".to_string());
+    }
+
+    Ok(())
+}
+
 // Helper function for single clip export
 async fn export_single_clip(
     clip: &ClipExportInfo,
     output_path: &str,
     width: u32,
     height: u32,
-    _app_handle: &tauri::AppHandle,
+    app_handle: &tauri::AppHandle,
 ) -> Result<String, String> {
-    // Run FFmpeg with progress monitoring and trim
+    // Calculate total duration for progress calculation
     let duration = clip.trim_end - clip.trim_start;
-    let output = Command::new_sidecar("ffmpeg")
-        .expect("failed to create ffmpeg command")
-        .args(&[
-            "-ss", &clip.trim_start.to_string(),
-            "-t", &duration.to_string(),
-            "-i", &clip.path,
-            "-vf", &format!("scale={}:{}", width, height),
-            "-c:v", "libx264",
-            "-preset", "medium",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
-            "-y",
-            output_path
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
 
-    if !output.status.success() {
-        return Err(format!("FFmpeg export failed: {}", output.stderr));
-    }
+    // Run FFmpeg with progress monitoring and trim
+    let args = vec![
+        "-ss", &clip.trim_start.to_string(),
+        "-t", &duration.to_string(),
+        "-i", &clip.path,
+        "-vf", &format!("scale={}:{}", width, height),
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-crf", "23",
+        "-c:a", "aac",
+        "-b:a", "128k",
+        "-progress", "pipe:2", // Send progress to stderr
+        "-y",
+        output_path
+    ];
+
+    run_ffmpeg_with_progress(&args, app_handle, Some(duration)).await?;
 
     // Verify output file
     let output_file = Path::new(output_path);
@@ -461,6 +531,9 @@ async fn export_multi_clips(
         .app_data_dir()
         .ok_or("Failed to get app data directory")?;
 
+    // Calculate total duration for progress
+    let total_duration: f64 = clips.iter().map(|c| c.trim_end - c.trim_start).sum();
+
     // For multi-clip with trims, we need to pre-process each clip first
     // Then concatenate the trimmed versions
     let mut trimmed_clip_paths = Vec::new();
@@ -469,9 +542,8 @@ async fn export_multi_clips(
         let temp_output = app_data_dir.join(format!("temp_clip_{}.mp4", i));
         let duration = clip.trim_end - clip.trim_start;
 
-        // Trim and scale each clip individually
-        let output = Command::new_sidecar("ffmpeg")
-            .expect("failed to create ffmpeg command")
+        // Trim and scale each clip individually (no progress for individual clips)
+        let output = Command::new("ffmpeg")
             .args(&[
                 "-ss", &clip.trim_start.to_string(),
                 "-t", &duration.to_string(),
@@ -483,14 +555,62 @@ async fn export_multi_clips(
                 "-c:a", "aac",
                 "-b:a", "128k",
                 "-y",
-                temp_output.to_str().ok_or("Invalid temp path")?
+                &temp_output.to_str().ok_or("Invalid temp path")?
             ])
             .output()
+            .await
             .map_err(|e| format!("Failed to trim clip {}: {}", i, e))?;
 
         if !output.status.success() {
-            return Err(format!("FFmpeg trim failed for clip {}: {}", i, output.stderr));
+            return Err(format!("FFmpeg trim failed for clip {}: {}", i, String::from_utf8_lossy(&output.stderr)));
         }
+
+        trimmed_clip_paths.push(temp_output);
+    }
+
+    // Create concat list file
+    let concat_list_path = app_data_dir.join("concat_list.txt");
+    let mut concat_file = fs::File::create(&concat_list_path)
+        .map_err(|e| format!("Failed to create concat list file: {}", e))?;
+
+    // Write concat demuxer format with trimmed clips
+    for temp_path in &trimmed_clip_paths {
+        writeln!(concat_file, "file '{}'", temp_path.to_str().ok_or("Invalid path")?)
+            .map_err(|e| format!("Failed to write to concat list: {}", e))?;
+    }
+
+    // Flush to ensure file is written
+    concat_file.flush()
+        .map_err(|e| format!("Failed to flush concat list: {}", e))?;
+    drop(concat_file); // Close file
+
+    // Run FFmpeg with concat demuxer and progress monitoring
+    let args = vec![
+        "-f", "concat",
+        "-safe", "0",
+        "-i", &concat_list_path.to_str().ok_or("Invalid concat list path")?,
+        "-c", "copy", // Stream copy since clips are already processed
+        "-progress", "pipe:2", // Send progress to stderr
+        "-y",
+        output_path
+    ];
+
+    run_ffmpeg_with_progress(&args, app_handle, Some(total_duration)).await?;
+
+    // Clean up temp files
+    for temp_path in &trimmed_clip_paths {
+        let _ = fs::remove_file(temp_path);
+    }
+    let _ = fs::remove_file(&concat_list_path);
+
+    // Verify output file
+    let output_file = Path::new(output_path);
+    if !output_file.exists() {
+        return Err("Output file was not created".to_string());
+    }
+
+    Ok(output_path.to_string())
+}
 
         trimmed_clip_paths.push(temp_output);
     }

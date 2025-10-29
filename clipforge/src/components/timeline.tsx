@@ -4,10 +4,13 @@ import { useRef, useEffect, useState } from "react"
 import { Canvas, Rect, Line, Text } from "fabric"
 import { useClipStore } from "../store/use-clip-store"
 
-const TIMELINE_HEIGHT = 240
+const NUM_TRACKS = 3 // Support 3 tracks for now
 const TRACK_HEIGHT = 80
-const TRACK_PADDING = 20
+const TRACK_PADDING = 10
+const TRACK_SPACING = 5
 const RULER_HEIGHT = 40
+const TRACK_LABEL_WIDTH = 60
+const TIMELINE_HEIGHT = RULER_HEIGHT + (NUM_TRACKS * (TRACK_HEIGHT + TRACK_SPACING)) + TRACK_PADDING * 2
 
 export function Timeline() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -55,6 +58,11 @@ export function Timeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clips.length, JSON.stringify(clips.map(c => ({ id: c.id, duration: c.duration })))])
 
+  // Helper function to calculate Y position for a track
+  const getTrackY = (trackNumber: number): number => {
+    return RULER_HEIGHT + TRACK_PADDING + (trackNumber * (TRACK_HEIGHT + TRACK_SPACING))
+  }
+
   // Render timeline elements
   useEffect(() => {
     const canvas = fabricCanvasRef.current
@@ -68,17 +76,35 @@ export function Timeline() {
     canvas.clear()
     canvas.backgroundColor = "#18181b" // zinc-900
 
-    // Draw track background
-    const track = new Rect({
-      left: 0,
-      top: RULER_HEIGHT + TRACK_PADDING,
-      width: canvas.width || 800,
-      height: TRACK_HEIGHT,
-      fill: "#27272a", // zinc-800
-      selectable: false,
-      evented: false,
-    })
-    canvas.add(track)
+    // Draw track backgrounds and labels
+    for (let trackNum = 0; trackNum < NUM_TRACKS; trackNum++) {
+      const trackY = getTrackY(trackNum)
+
+      // Track label
+      const trackLabel = new Text(`Track ${trackNum + 1}`, {
+        left: 8,
+        top: trackY + TRACK_HEIGHT / 2 - 8,
+        fontSize: 12,
+        fill: "#71717a", // zinc-500
+        selectable: false,
+        evented: false,
+      })
+      canvas.add(trackLabel)
+
+      // Track background
+      const track = new Rect({
+        left: TRACK_LABEL_WIDTH,
+        top: trackY,
+        width: (canvas.width || 800) - TRACK_LABEL_WIDTH,
+        height: TRACK_HEIGHT,
+        fill: trackNum % 2 === 0 ? "#27272a" : "#1f1f23", // Alternating zinc-800/900
+        stroke: "#3f3f46", // zinc-700
+        strokeWidth: 1,
+        selectable: false,
+        evented: false,
+      })
+      canvas.add(track)
+    }
 
     // Draw time ruler - scale to longest clip
     const canvasWidth = canvas.width || 800
@@ -112,7 +138,7 @@ export function Timeline() {
 
     // Draw clips
     clips.forEach((clip) => {
-      const x = clip.start * zoom
+      const x = clip.start * zoom + TRACK_LABEL_WIDTH
       const fullWidth = (clip.end - clip.start) * zoom
 
       // Calculate trim handle positions within the clip
@@ -122,12 +148,25 @@ export function Timeline() {
 
       const isSelected = clip.id === selectedClipId
 
+      // Calculate Y position based on track number
+      const trackY = getTrackY(clip.track)
+      const clipYOffset = 10 // Vertical padding within track
+
+      // Check for overlaps with other clips on same track
+      const hasOverlap = clips.some(c =>
+        c.id !== clip.id &&
+        c.track === clip.track &&
+        ((clip.start >= c.start && clip.start < c.end) ||
+         (clip.end > c.start && clip.end <= c.end) ||
+         (clip.start <= c.start && clip.end >= c.end))
+      )
+
       // Full clip rectangle (dimmed to show untrimmed portions)
       const clipRect = new Rect({
         left: x,
-        top: RULER_HEIGHT + TRACK_PADDING + 10,
+        top: trackY + clipYOffset,
         width: fullWidth,
-        height: TRACK_HEIGHT - 20,
+        height: TRACK_HEIGHT - (clipYOffset * 2),
         fill: isSelected ? "#1e3a8a" : "#312e81", // darker blue for full clip
         stroke: isSelected ? "#60a5fa" : "#818cf8",
         strokeWidth: 1,
@@ -138,24 +177,24 @@ export function Timeline() {
         evented: false,
       })
 
-      // Trimmed portion (brighter)
+      // Trimmed portion (brighter) - with overlap indicator
       const trimmedRect = new Rect({
         left: x + trimStartOffset,
-        top: RULER_HEIGHT + TRACK_PADDING + 10,
+        top: trackY + clipYOffset,
         width: trimmedWidth,
-        height: TRACK_HEIGHT - 20,
-        fill: isSelected ? "#3b82f6" : "#6366f1",
-        stroke: isSelected ? "#60a5fa" : "#818cf8",
-        strokeWidth: 2,
+        height: TRACK_HEIGHT - (clipYOffset * 2),
+        fill: hasOverlap ? "#dc2626" : (isSelected ? "#3b82f6" : "#6366f1"), // Red if overlapping
+        stroke: hasOverlap ? "#ef4444" : (isSelected ? "#60a5fa" : "#818cf8"), // Red border if overlapping
+        strokeWidth: hasOverlap ? 3 : 2, // Thicker border for overlap
         rx: 4,
         ry: 4,
-        shadow: isSelected ? "0 4px 12px rgba(59, 130, 246, 0.4)" : "0 2px 8px rgba(0, 0, 0, 0.3)",
+        shadow: hasOverlap ? "0 4px 12px rgba(220, 38, 38, 0.6)" : (isSelected ? "0 4px 12px rgba(59, 130, 246, 0.4)" : "0 2px 8px rgba(0, 0, 0, 0.3)"),
       })
 
       // Clip name text
       const clipText = new Text(clip.name, {
         left: x + trimStartOffset + 8,
-        top: RULER_HEIGHT + TRACK_PADDING + 18,
+        top: trackY + clipYOffset + 8,
         fontSize: 13,
         fill: "#ffffff",
         selectable: false,
@@ -165,9 +204,9 @@ export function Timeline() {
       // Trim handles - positioned at trim points
       const leftHandle = new Rect({
         left: x + trimStartOffset,
-        top: RULER_HEIGHT + TRACK_PADDING + 10,
+        top: trackY + clipYOffset,
         width: 12,
-        height: TRACK_HEIGHT - 20,
+        height: TRACK_HEIGHT - (clipYOffset * 2),
         fill: "#ffffff",
         stroke: "#3b82f6",
         strokeWidth: 2,
@@ -181,9 +220,9 @@ export function Timeline() {
 
       const rightHandle = new Rect({
         left: x + trimEndOffset - 12,
-        top: RULER_HEIGHT + TRACK_PADDING + 10,
+        top: trackY + clipYOffset,
         width: 12,
-        height: TRACK_HEIGHT - 20,
+        height: TRACK_HEIGHT - (clipYOffset * 2),
         fill: "#ffffff",
         stroke: "#3b82f6",
         strokeWidth: 2,
@@ -203,27 +242,75 @@ export function Timeline() {
       })
 
       trimmedRect.on("moving", (e) => {
-        // Just constrain movement, don't update state
+        // Allow both horizontal and vertical movement
         const target = e.target
         if (!target) return
 
-        // Constrain to positive time only
-        const minX = 0
+        // Constrain to positive time only (horizontal)
+        const minX = TRACK_LABEL_WIDTH
         if ((target.left || 0) < minX) {
           target.left = minX
         }
+
+        // Constrain vertical movement to valid tracks
+        const targetY = target.top || 0
+        let snappedTrack = 0
+        let minDistance = Infinity
+
+        // Find closest track based on Y position
+        for (let i = 0; i < NUM_TRACKS; i++) {
+          const trackCenterY = getTrackY(i) + (TRACK_HEIGHT / 2)
+          const distance = Math.abs(targetY - trackCenterY + clipYOffset + (TRACK_HEIGHT / 2))
+          if (distance < minDistance) {
+            minDistance = distance
+            snappedTrack = i
+          }
+        }
+
+        // Snap to the detected track
+        target.top = getTrackY(snappedTrack) + clipYOffset
       })
 
       trimmedRect.on("mouseup", (e) => {
         const target = e.target
         if (target) {
-          // Now update the state only once when drag ends
-          const newStart = Math.max(0, ((target.left || 0) - trimStartOffset) / zoom)
+          // Calculate new start time and track
+          const newStart = Math.max(0, ((target.left || 0) - TRACK_LABEL_WIDTH - trimStartOffset) / zoom)
           const duration = clip.end - clip.start
-          updateClip(clip.id, {
-            start: newStart,
-            end: newStart + duration,
-          })
+
+          // Determine which track based on Y position
+          const targetY = target.top || 0
+          let newTrack = clip.track
+          for (let i = 0; i < NUM_TRACKS; i++) {
+            const trackCenterY = getTrackY(i) + (TRACK_HEIGHT / 2)
+            const distance = Math.abs(targetY - trackCenterY + clipYOffset + (TRACK_HEIGHT / 2))
+            if (distance < (TRACK_HEIGHT / 2)) {
+              newTrack = i
+              break
+            }
+          }
+
+          // Check for overlaps on the target track
+          const hasOverlap = clips.some(c =>
+            c.id !== clip.id &&
+            c.track === newTrack &&
+            ((newStart >= c.start && newStart < c.end) ||
+             (newStart + duration > c.start && newStart + duration <= c.end) ||
+             (newStart <= c.start && newStart + duration >= c.end))
+          )
+
+          if (hasOverlap) {
+            // Show warning and revert to original position
+            alert(`⚠️ Cannot place clip here - overlaps with another clip on Track ${newTrack + 1}`)
+            setForceRender(prev => prev + 1) // Force re-render to reset position
+          } else {
+            // Update clip position and track
+            updateClip(clip.id, {
+              start: newStart,
+              end: newStart + duration,
+              track: newTrack,
+            })
+          }
         }
         isDraggingRef.current = false
         setForceRender(prev => prev + 1)
@@ -306,7 +393,7 @@ export function Timeline() {
         setForceRender(prev => prev + 1)
       })
 
-      trimmedRect.set({ lockMovementY: true, hoverCursor: "move" })
+      trimmedRect.set({ hoverCursor: "move" }) // Allow vertical movement for track switching
       leftHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true, hasControls: false })
       rightHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true, hasControls: false })
 
@@ -316,7 +403,7 @@ export function Timeline() {
     })
 
     // Draw playhead
-    const playheadX = playhead * zoom
+    const playheadX = playhead * zoom + TRACK_LABEL_WIDTH
     const playheadLine = new Line([playheadX, 0, playheadX, TIMELINE_HEIGHT], {
       stroke: "#ef4444", // red-500
       strokeWidth: 2,
@@ -343,8 +430,8 @@ export function Timeline() {
       const target = e.target
       if (!target) return
 
-      // Constrain to positive time only
-      const minX = -6
+      // Constrain to valid timeline area (account for track label)
+      const minX = TRACK_LABEL_WIDTH - 6
       if ((target.left || 0) < minX) {
         target.left = minX
       }
@@ -354,7 +441,7 @@ export function Timeline() {
       const target = e.target
       if (target) {
         // Update state only once when drag ends
-        const newTime = Math.max(0, ((target.left || 0) + 6) / zoom)
+        const newTime = Math.max(0, ((target.left || 0) + 6 - TRACK_LABEL_WIDTH) / zoom)
         setPlayhead(newTime)
       }
       isDraggingRef.current = false
@@ -369,7 +456,7 @@ export function Timeline() {
     canvas.on("mouse:down", (e) => {
       if (!e.target) {
         const pointer = canvas.getPointer(e.e)
-        const newTime = Math.max(0, pointer.x / zoom)
+        const newTime = Math.max(0, (pointer.x - TRACK_LABEL_WIDTH) / zoom)
         setPlayhead(newTime)
       }
     })

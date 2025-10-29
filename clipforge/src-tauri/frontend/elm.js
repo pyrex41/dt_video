@@ -5210,6 +5210,7 @@ var $author$project$Main$init = function (_v0) {
 			appName: 'ClipForge',
 			clickStartPos: $elm$core$Maybe$Nothing,
 			clips: _List_Nil,
+			contextMenu: $elm$core$Maybe$Nothing,
 			dragging: $elm$core$Maybe$Nothing,
 			exportProgress: 0.0,
 			hoveredClip: $elm$core$Maybe$Nothing,
@@ -7687,11 +7688,36 @@ var $author$project$Main$update = F2(
 							model,
 							{isPlaying: false}),
 						$elm$core$Platform$Cmd$none);
+				case 'ShowContextMenuAtPosition':
+					var x = msg.a;
+					var y = msg.b;
+					var _v45 = A3($author$project$Main$findClipAtPosition, x, y, model);
+					if (_v45.$ === 'Just') {
+						var _v46 = _v45.a;
+						var clip = _v46.a;
+						return _Utils_Tuple2(
+							_Utils_update(
+								model,
+								{
+									contextMenu: $elm$core$Maybe$Just(
+										_Utils_Tuple3(x, y, clip.id))
+								}),
+							$elm$core$Platform$Cmd$none);
+					} else {
+						return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+					}
+				case 'HideContextMenu':
+					return _Utils_Tuple2(
+						_Utils_update(
+							model,
+							{contextMenu: $elm$core$Maybe$Nothing}),
+						$elm$core$Platform$Cmd$none);
 				default:
 					return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 			}
 		}
 	});
+var $author$project$Main$HideContextMenu = {$: 'HideContextMenu'};
 var $elm$html$Html$Attributes$stringProperty = F2(
 	function (key, string) {
 		return A2(
@@ -7701,6 +7727,23 @@ var $elm$html$Html$Attributes$stringProperty = F2(
 	});
 var $elm$html$Html$Attributes$class = $elm$html$Html$Attributes$stringProperty('className');
 var $elm$html$Html$div = _VirtualDom_node('div');
+var $elm$virtual_dom$VirtualDom$Normal = function (a) {
+	return {$: 'Normal', a: a};
+};
+var $elm$virtual_dom$VirtualDom$on = _VirtualDom_on;
+var $elm$html$Html$Events$on = F2(
+	function (event, decoder) {
+		return A2(
+			$elm$virtual_dom$VirtualDom$on,
+			event,
+			$elm$virtual_dom$VirtualDom$Normal(decoder));
+	});
+var $elm$html$Html$Events$onClick = function (msg) {
+	return A2(
+		$elm$html$Html$Events$on,
+		'click',
+		$elm$json$Json$Decode$succeed(msg));
+};
 var $elm$html$Html$h2 = _VirtualDom_node('h2');
 var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
@@ -7808,23 +7851,6 @@ var $author$project$MediaLibrary$filteredClips = F2(
 	});
 var $elm$html$Html$h3 = _VirtualDom_node('h3');
 var $elm$html$Html$input = _VirtualDom_node('input');
-var $elm$virtual_dom$VirtualDom$Normal = function (a) {
-	return {$: 'Normal', a: a};
-};
-var $elm$virtual_dom$VirtualDom$on = _VirtualDom_on;
-var $elm$html$Html$Events$on = F2(
-	function (event, decoder) {
-		return A2(
-			$elm$virtual_dom$VirtualDom$on,
-			event,
-			$elm$virtual_dom$VirtualDom$Normal(decoder));
-	});
-var $elm$html$Html$Events$onClick = function (msg) {
-	return A2(
-		$elm$html$Html$Events$on,
-		'click',
-		$elm$json$Json$Decode$succeed(msg));
-};
 var $elm$html$Html$Events$alwaysStop = function (x) {
 	return _Utils_Tuple2(x, true);
 };
@@ -8636,13 +8662,20 @@ var $elm$html$Html$Attributes$id = $elm$html$Html$Attributes$stringProperty('id'
 var $elm$html$Html$p = _VirtualDom_node('p');
 var $elm$html$Html$video = _VirtualDom_node('video');
 var $author$project$Main$viewPreview = function (model) {
+	var clipsAtPlayhead = A2(
+		$elm$core$List$filter,
+		function (c) {
+			return (_Utils_cmp(model.playhead, c.startTime) > -1) && (_Utils_cmp(model.playhead, c.startTime + c.duration) < 0);
+		},
+		model.clips);
 	var currentClip = $elm$core$List$head(
-		A2(
-			$elm$core$List$filter,
-			function (c) {
-				return (_Utils_cmp(model.playhead, c.startTime) > -1) && (_Utils_cmp(model.playhead, c.startTime + c.duration) < 0);
-			},
-			model.clips));
+		$elm$core$List$reverse(
+			A2(
+				$elm$core$List$sortBy,
+				function ($) {
+					return $.track;
+				},
+				clipsAtPlayhead)));
 	return A2(
 		$elm$html$Html$div,
 		_List_fromArray(
@@ -8911,6 +8944,20 @@ var $author$project$Main$canvasClickDecoder = function (canvasWidth) {
 	return A3(
 		$elm$json$Json$Decode$map2,
 		$author$project$Main$MouseDown,
+		A2($elm$json$Json$Decode$field, 'offsetX', $elm$json$Json$Decode$float),
+		A2($elm$json$Json$Decode$field, 'offsetY', $elm$json$Json$Decode$float));
+};
+var $author$project$Main$ShowContextMenuAtPosition = F2(
+	function (a, b) {
+		return {$: 'ShowContextMenuAtPosition', a: a, b: b};
+	});
+var $author$project$Main$canvasContextMenuDecoder = function (canvasWidth) {
+	return A3(
+		$elm$json$Json$Decode$map2,
+		F2(
+			function (x, y) {
+				return A2($author$project$Main$ShowContextMenuAtPosition, x + 10, y + 10);
+			}),
 		A2($elm$json$Json$Decode$field, 'offsetX', $elm$json$Json$Decode$float),
 		A2($elm$json$Json$Decode$field, 'offsetY', $elm$json$Json$Decode$float));
 };
@@ -10323,6 +10370,76 @@ var $joakin$elm_canvas$Canvas$toHtml = F3(
 			attrs,
 			entities);
 	});
+var $author$project$Main$viewContextMenu = function (model) {
+	var _v0 = model.contextMenu;
+	if (_v0.$ === 'Just') {
+		var _v1 = _v0.a;
+		var x = _v1.a;
+		var y = _v1.b;
+		var clipId = _v1.c;
+		return A2(
+			$elm$html$Html$div,
+			_List_fromArray(
+				[
+					$elm$html$Html$Attributes$class('fixed bg-gray-700 rounded-lg shadow-lg z-50 border border-gray-600 overflow-hidden'),
+					A2(
+					$elm$html$Html$Attributes$style,
+					'left',
+					$elm$core$String$fromFloat(x) + 'px'),
+					A2(
+					$elm$html$Html$Attributes$style,
+					'top',
+					$elm$core$String$fromFloat(y) + 'px'),
+					A2(
+					$elm$html$Html$Events$stopPropagationOn,
+					'click',
+					$elm$json$Json$Decode$succeed(
+						_Utils_Tuple2($author$project$Main$NoOp, true)))
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$elm$html$Html$button,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$class('w-full text-left px-4 py-2 hover:bg-gray-600 text-white flex items-center gap-2 transition-colors duration-200'),
+							$elm$html$Html$Events$onClick(
+							$author$project$Main$SplitClipAtPlayhead(clipId))
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text('✂️ Split at Playhead')
+						])),
+					A2(
+					$elm$html$Html$button,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$class('w-full text-left px-4 py-2 hover:bg-gray-600 text-white flex items-center gap-2 transition-colors duration-200'),
+							$elm$html$Html$Events$onClick(
+							$author$project$Main$SelectClip(
+								$elm$core$Maybe$Just(clipId))),
+							$elm$html$Html$Events$onClick($author$project$Main$HideContextMenu)
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text('🎯 Select Clip')
+						])),
+					A2(
+					$elm$html$Html$button,
+					_List_fromArray(
+						[
+							$elm$html$Html$Attributes$class('w-full text-left px-4 py-2 hover:bg-gray-600 text-white flex items-center gap-2 transition-colors duration-200'),
+							$elm$html$Html$Events$onClick($author$project$Main$RemoveSelectedClip)
+						]),
+					_List_fromArray(
+						[
+							$elm$html$Html$text('🗑️ Delete Clip')
+						]))
+				]));
+	} else {
+		return $elm$html$Html$text('');
+	}
+};
 var $author$project$Main$viewCanvas = function (model) {
 	var timelineDuration = $author$project$Main$getTimelineDuration(model);
 	var canvasWidth = A2($elm$core$Basics$max, model.timelineWidth, (timelineDuration * model.pixelsPerSecond) + 100);
@@ -10369,7 +10486,11 @@ var $author$project$Main$viewCanvas = function (model) {
 						A2(
 						$elm$html$Html$Events$on,
 						'mousedown',
-						$author$project$Main$canvasClickDecoder(canvasWidth))
+						$author$project$Main$canvasClickDecoder(canvasWidth)),
+						A2(
+						$elm$html$Html$Events$on,
+						'contextmenu',
+						$author$project$Main$canvasContextMenuDecoder(canvasWidth))
 					]),
 				A2($author$project$Main$renderTimeline, model, canvasHeight)),
 				A2(
@@ -10384,7 +10505,8 @@ var $author$project$Main$viewCanvas = function (model) {
 						'Playhead: ' + $author$project$Main$formatDuration(model.playhead)),
 						$elm$html$Html$text(
 						'Duration: ' + $author$project$Main$formatDuration(timelineDuration))
-					]))
+					])),
+				$author$project$Main$viewContextMenu(model)
 			]));
 };
 var $author$project$Main$viewTimeline = function (model) {
@@ -10583,7 +10705,8 @@ var $author$project$Main$view = function (model) {
 		$elm$html$Html$div,
 		_List_fromArray(
 			[
-				$elm$html$Html$Attributes$class('flex flex-col min-h-screen bg-gray-900 text-white')
+				$elm$html$Html$Attributes$class('flex flex-col min-h-screen bg-gray-900 text-white'),
+				$elm$html$Html$Events$onClick($author$project$Main$HideContextMenu)
 			]),
 		_List_fromArray(
 			[

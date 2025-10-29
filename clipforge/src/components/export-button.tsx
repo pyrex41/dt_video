@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { invoke } from "@tauri-apps/api/tauri"
 import { save } from "@tauri-apps/api/dialog"
+import { listen } from "@tauri-apps/api/event"
 import { Button } from "./ui/button"
 import { Download, Settings } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
@@ -13,12 +14,34 @@ import { CheckCircle } from "lucide-react"
 
 export function ExportButton() {
   const [isExporting, setIsExporting] = useState(false)
-  const [resolution, setResolution] = useState<"720p" | "1080p">("720p")
-  const [estimatedProgress, setEstimatedProgress] = useState(0)
+  const [resolution, setResolution] = useState<"720p" | "1080p" | "source" | "480p" | "4K">("720p")
+  const [realProgress, setRealProgress] = useState(0)
   const [exportSuccess, setExportSuccess] = useState(false)
   const [exportedFileName, setExportedFileName] = useState<string | null>(null)
 
   const { clips, setError, exportProgress, setExportProgress } = useClipStore()
+
+  // Listen for real export progress from backend
+  useEffect(() => {
+    let unlisten: (() => void) | undefined
+
+    const setupListener = async () => {
+      unlisten = await listen<number>("export-progress", (event) => {
+        setRealProgress(event.payload)
+        setExportProgress(event.payload)
+      })
+    }
+
+    if (isExporting) {
+      setupListener()
+    }
+
+    return () => {
+      if (unlisten) {
+        unlisten()
+      }
+    }
+  }, [isExporting, setExportProgress])
 
   const handleExport = async () => {
     // Validate clips
@@ -78,15 +101,8 @@ export function ExportButton() {
       console.log("[ClipForge] Resolution:", resolution)
       console.log("[ClipForge] Total clips:", clipsWithTrim.length)
 
-      // Start progress estimation
-      let progressValue = 0
-      const progressInterval = setInterval(() => {
-        progressValue += 5
-        if (progressValue <= 90) {
-          setEstimatedProgress(progressValue)
-          setExportProgress(progressValue)
-        }
-      }, 500)
+      // Reset real progress
+      setRealProgress(0)
 
       // Invoke backend export
       const result = await invoke<string>("export_video", {
@@ -95,10 +111,9 @@ export function ExportButton() {
         resolution,
       })
 
-      // Clear interval and complete
-      clearInterval(progressInterval)
+      // Complete progress
+      setRealProgress(100)
       setExportProgress(100)
-      setEstimatedProgress(100)
 
       // Show success message
       setExportSuccess(true)
@@ -151,19 +166,40 @@ export function ExportButton() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-48 bg-zinc-800 border-zinc-700 p-2 rounded-lg shadow-xl">
-              <DropdownMenuItem 
+              <DropdownMenuItem
+                onClick={() => setResolution("source")}
+                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+              >
+                <span className="w-6 text-center">🎬</span>
+                <span className="text-sm">Source</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setResolution("480p")}
+                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+              >
+                <span className="w-6 text-center">📱</span>
+                <span className="text-sm">480p (854×480)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 onClick={() => setResolution("720p")}
                 className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
               >
                 <span className="w-6 text-center">📱</span>
                 <span className="text-sm">720p (1280×720)</span>
               </DropdownMenuItem>
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => setResolution("1080p")}
                 className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
               >
                 <span className="w-6 text-center">🖥️</span>
                 <span className="text-sm">1080p (1920×1080)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setResolution("4K")}
+                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+              >
+                <span className="w-6 text-center">🎥</span>
+                <span className="text-sm">4K (3840×2160)</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -186,15 +222,15 @@ export function ExportButton() {
           </div>
         </div>
 
-        {isExporting && estimatedProgress > 0 && (
+        {isExporting && realProgress > 0 && (
           <div className="flex items-center gap-2">
             <div className="w-24 h-2 bg-zinc-700 rounded-full overflow-hidden">
-              <div 
+              <div
                 className="h-full bg-green-500 transition-all duration-300 ease-out rounded-full"
-                style={{ width: `${estimatedProgress}%` }}
+                style={{ width: `${realProgress}%` }}
               />
             </div>
-            <span className="text-xs text-zinc-400 font-mono">{Math.round(estimatedProgress)}%</span>
+            <span className="text-xs text-zinc-400 font-mono">{Math.round(realProgress)}%</span>
           </div>
         )}
       </div>
