@@ -342,8 +342,65 @@ export function Timeline() {
     canvas.renderAll()
   }, [clips, playhead, zoom, selectedClipId, setPlayhead, setSelectedClip, updateClip, trimClip, deleteClip, forceRender])
 
+  // Handle drag and drop from media library
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "copy"
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+
+    try {
+      const clipData = JSON.parse(e.dataTransfer.getData("application/json"))
+      const canvas = fabricCanvasRef.current
+      if (!canvas) return
+
+      // Calculate drop position in timeline
+      const rect = canvasRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      const dropX = e.clientX - rect.left
+      const dropTime = Math.max(0, dropX / zoom)
+
+      // Create a new clip instance from the library clip
+      // Find the end of the timeline to place it sequentially by default
+      const existingClips = clips
+      const lastClipEnd = existingClips.length > 0
+        ? Math.max(...existingClips.map(c => c.end))
+        : 0
+
+      // Use drop position if it's after existing clips, otherwise append
+      const startTime = Math.max(dropTime, lastClipEnd)
+
+      // Generate new unique ID for the timeline instance
+      const newClip = {
+        ...clipData,
+        id: `${clipData.id}-${Date.now()}`, // New ID for timeline instance
+        start: startTime,
+        end: startTime + clipData.duration,
+        trimStart: clipData.trimStart || 0,
+        trimEnd: clipData.trimEnd || clipData.duration,
+        track: 0, // Default to main track
+      }
+
+      // Add to timeline
+      useClipStore.getState().addClip(newClip)
+      setPlayhead(startTime)
+      setSelectedClip(newClip.id)
+
+      console.log('[ClipForge] Clip dropped on timeline:', { dropTime, startTime, clip: newClip })
+    } catch (err) {
+      console.error('[ClipForge] Failed to drop clip:', err)
+    }
+  }
+
   return (
-    <div className="relative border-t border-zinc-800 bg-zinc-900">
+    <div
+      className="relative border-t border-zinc-800 bg-zinc-900"
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <canvas ref={canvasRef} />
     </div>
   )

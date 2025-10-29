@@ -69,7 +69,22 @@ export function MediaLibrary() {
               clips.map((clip) => (
                 <div
                   key={clip.id}
-                  className="bg-zinc-800 rounded-lg p-3 border border-zinc-700 hover:border-blue-500 transition-colors cursor-pointer group"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/json", JSON.stringify(clip))
+                    e.dataTransfer.effectAllowed = "copy"
+                    // Add visual feedback
+                    if (e.currentTarget instanceof HTMLElement) {
+                      e.currentTarget.style.opacity = "0.5"
+                    }
+                  }}
+                  onDragEnd={(e) => {
+                    // Reset visual feedback
+                    if (e.currentTarget instanceof HTMLElement) {
+                      e.currentTarget.style.opacity = "1"
+                    }
+                  }}
+                  className="bg-zinc-800 rounded-lg p-3 border border-zinc-700 hover:border-blue-500 transition-colors cursor-grab active:cursor-grabbing group"
                 >
                   {/* Thumbnail */}
                   <div className="aspect-video bg-zinc-700 rounded mb-2 overflow-hidden group-hover:ring-2 group-hover:ring-blue-500 transition-all">
@@ -78,6 +93,7 @@ export function MediaLibrary() {
                         src={convertFileSrc(clip.thumbnail_path)}
                         alt={clip.name}
                         className="w-full h-full object-cover"
+                        draggable={false}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
