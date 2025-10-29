@@ -1684,7 +1684,7 @@
             "title": "Add Track Lane Labels",
             "description": "Render a visible label for each track lane (name/index) aligned with its Y-offset.",
             "dependencies": [],
-            "details": "Add a label area or left gutter in timeline.tsx for each <TrackLane>. Ensure labels stay in sync with lane ordering and scrolling and are keyboard accessible (aria-label).",
+            "details": "Add a label area or left gutter in timeline.tsx for each <TrackLane>. Ensure labels stay in sync with lane ordering and scrolling and are keyboard accessible (aria-label).\n<info added on 2025-10-29T17:47:59.207Z>\nImplemented color-coded track lane labels in timeline.tsx using left-gutter backgrounds: blue for track 0 and purple for track 1. Labels align to each lane’s Y-offset and highlight during drag operations to clearly indicate the target lane and provide visual feedback.\n</info added on 2025-10-29T17:47:59.207Z>",
             "status": "done",
             "testStrategy": "Verify labels render for all lanes, remain fixed during horizontal scroll, and update if tracks are added/removed."
           },
