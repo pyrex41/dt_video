@@ -15,7 +15,7 @@ crate-type = ["lib", "cdylib", "staticlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2.9.2", features = [] }
+tauri = { version = "2.9.2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2.0"
 nokhwa = "0.10.9"
 serde = { version = "1.0", features = ["derive"] }

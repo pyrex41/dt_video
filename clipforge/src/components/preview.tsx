@@ -17,7 +17,9 @@ export function Preview() {
   const [isDragOver, setIsDragOver] = useState(false)
   const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip } = useClipStore()
 
-  const currentClip = clips.find((clip) => playhead >= clip.start && playhead < clip.end)
+  // Find all clips at current playhead position, prioritize lowest track number (track 0 is top)
+  const clipsAtPlayhead = clips.filter((clip) => playhead >= clip.start && playhead < clip.end)
+  const currentClip = clipsAtPlayhead.sort((a, b) => a.track - b.track)[0]
 
   // Audio settings
   const volume = currentClip?.volume ?? 1
@@ -44,7 +46,9 @@ export function Preview() {
     document.querySelectorAll('.plyr').forEach((el) => el.remove())
 
     // STEP 3: Set video source
-    video.src = convertFileSrc(currentClip.path)
+    const convertedSrc = convertFileSrc(currentClip.path)
+    console.log('[ClipForge] Converting video path:', currentClip.path, '→', convertedSrc)
+    video.src = convertedSrc
 
     // STEP 4: Create fresh player
     console.log('[ClipForge] Creating new Plyr instance for clip:', currentClip.id)
@@ -162,7 +166,12 @@ export function Preview() {
         })
       } else if (!isPlaying && !player.paused) {
         isUpdatingPlayState.current = true
+        console.log('[ClipForge] Pausing playback')
         player.pause()
+        // Also ensure the underlying video element is paused
+        if (player.media) {
+          player.media.pause()
+        }
         setTimeout(() => { isUpdatingPlayState.current = false }, 100)
       }
     }
@@ -217,8 +226,8 @@ export function Preview() {
       onDragLeave={handleDragLeave}
     >
       {currentClip ? (
-        <div className="w-full h-full flex items-center justify-center">
-          <div className="relative max-w-3xl max-h-full aspect-video bg-black rounded-lg overflow-hidden shadow-xl">
+        <div className="w-full h-full flex items-center justify-center p-6">
+          <div className="relative w-full h-full bg-black rounded-lg overflow-hidden shadow-xl">
             {isLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
                 <div className="text-white text-sm">Loading...</div>

@@ -238,6 +238,7 @@ fn generate_thumbnail(
             .thumbnail(time_pos)
             .scale(320, None)
             .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
+            .with_app_handle(app_handle.clone())
             .run_sync();
 
         match result {
