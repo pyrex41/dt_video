@@ -14,6 +14,8 @@ export interface Clip {
   file_size?: number
   codec?: string
   bit_rate?: number
+  volume?: number // Volume level 0-1 (default 1)
+  muted?: boolean // Mute state (default false)
 }
 
 export interface VideoMetadata {

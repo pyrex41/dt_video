@@ -118,6 +118,8 @@ export function RecordButton() {
             track: 0,
             trimStart: 0,
             trimEnd: duration,
+            volume: 1,
+            muted: false,
           }
 
           // Validate the clip before adding
@@ -247,6 +249,8 @@ export function RecordButton() {
             track: 0,
             trimStart: 0,
             trimEnd: duration,
+            volume: 1,
+            muted: false,
           }
 
           // Validate the clip before adding
@@ -453,6 +457,8 @@ export function RecordButton() {
             track: 0,
             trimStart: 0,
             trimEnd: duration,
+            volume: 1,
+            muted: false,
           }
 
           // Validate the clip before adding

@@ -17,6 +17,10 @@ export function Preview() {
 
   const currentClip = clips.find((clip) => playhead >= clip.start && playhead < clip.end)
 
+  // Audio settings
+  const volume = currentClip?.volume ?? 1
+  const muted = currentClip?.muted ?? false
+
   useEffect(() => {
     if (!videoRef.current || !currentClip) return
 
@@ -56,6 +60,10 @@ export function Preview() {
       })
 
       const player = playerRef.current
+
+      // Apply audio settings
+      player.volume = volume
+      player.muted = muted
 
       player.on("timeupdate", () => {
         if (currentClip && !isUpdatingFromPlayer.current) {
@@ -139,7 +147,16 @@ export function Preview() {
         player.destroy()
       }
     }
-  }, [currentClip])
+  }, [currentClip, volume, muted])
+
+  // Apply audio settings when they change
+  useEffect(() => {
+    if (!playerRef.current) return
+
+    const player = playerRef.current
+    player.volume = volume
+    player.muted = muted
+  }, [volume, muted])
 
   useEffect(() => {
     if (!playerRef.current || !currentClip || isUpdatingFromPlayer.current) return

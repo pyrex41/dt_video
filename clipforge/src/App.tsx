@@ -7,6 +7,7 @@ import { Timeline } from "./components/timeline"
 import { Preview } from "./components/preview"
 import { Controls } from "./components/controls"
 import { MediaLibrary } from "./components/media-library"
+import { AudioControls } from "./components/audio-controls"
 import { useClipStore } from "./store/use-clip-store"
 import { Alert, AlertDescription } from "./components/ui/alert"
 import { AlertCircle, Info } from "lucide-react"
@@ -72,6 +73,8 @@ function App() {
         <div className="border-t border-zinc-700">
           <Timeline />
         </div>
+
+        <AudioControls />
       </div>
     </div>
   )

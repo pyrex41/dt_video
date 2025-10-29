@@ -1147,7 +1147,7 @@
   "recording": {
     "tasks": [
       {
-        "id": "1",
+        "id": 1,
         "title": "Enhance File Import for Multiple Files",
         "description": "Update the file import functionality to support selecting and importing multiple video files at once using the native file dialog.",
         "details": "Modify the Tauri dialog options to set 'multiple: true' in the file picker. Update the frontend to handle an array of selected files. Loop through each file, validate format, and call the existing 'import_file' command for each. Ensure error handling for unsupported formats and provide user feedback for each file.",
@@ -1196,7 +1196,7 @@
         "updatedAt": "2025-10-29T14:08:17.312Z"
       },
       {
-        "id": "2",
+        "id": 2,
         "title": "Add Batch Import Progress Indicator",
         "description": "Implement a progress indicator to show the status of importing multiple files, providing feedback during batch operations.",
         "details": "Create a progress bar component in the UI that updates as each file is processed. Use a state variable to track import progress (e.g., number of files imported out of total). Integrate with the loop in the import function to update progress after each successful import. Display estimated time or percentage complete.",
@@ -1235,7 +1235,7 @@
         "expansionPrompt": "No further expansion needed as the task is already divided into UI component creation and integration with import logic."
       },
       {
-        "id": "3",
+        "id": 3,
         "title": "Create Media Library Sidebar Component",
         "description": "Develop a collapsible sidebar panel to display all imported media clips with basic structure for thumbnails and metadata.",
         "details": "Build a new MediaLibrary React component as a sidebar (left or right side). Use existing 'list_clips' command to fetch clips from the clips directory. Render a list of clips with placeholders for thumbnails and metadata. Make the sidebar collapsible with a toggle button.",
@@ -1289,7 +1289,7 @@
         "updatedAt": "2025-10-29T14:11:11.164Z"
       },
       {
-        "id": "4",
+        "id": 4,
         "title": "Implement Thumbnail Generation",
         "description": "Generate thumbnail images for each media clip using FFmpeg to display in the media library.",
         "details": "Create a 'generate_thumbnail' Rust command that uses FFmpeg to extract a frame (e.g., at 1 second) from each video file: 'ffmpeg -i input.mp4 -ss 00:00:01 -vframes 1 thumbnail.jpg'. Store thumbnails in 'clips/thumbnails/' directory. Call this command when importing files or on demand for existing clips. Update the Clip interface to include thumbnail path.",
@@ -1359,7 +1359,7 @@
         "updatedAt": "2025-10-29T14:16:09.240Z"
       },
       {
-        "id": "5",
+        "id": 5,
         "title": "Display Metadata in Media Library",
         "description": "Show detailed metadata for each clip in the library, including duration, resolution, file size, and format.",
         "details": "Extend the MediaLibrary component to display metadata fetched from the clips (e.g., using FFmpeg probe or file stats). Format duration as MM:SS, resolution as WxH, file size in MB. Retrieve this data during import or thumbnail generation and store in clip objects. Render metadata below each thumbnail.",
@@ -1399,7 +1399,7 @@
         "expansionPrompt": "No further expansion needed as the task is already split into metadata fetching/storage and UI rendering."
       },
       {
-        "id": "6",
+        "id": 6,
         "title": "Enable Drag-and-Drop from Library to Timeline",
         "description": "Allow users to drag clips from the media library directly onto the timeline for editing.",
         "details": "Make each clip item in the MediaLibrary draggable using React DnD or native HTML5 drag API. On drop, integrate with the existing timeline store to add the clip at the drop position. Ensure the clip data (path, metadata) is passed correctly.",
@@ -1438,7 +1438,7 @@
         "expansionPrompt": "No further expansion needed as the task is already divided into implementing drag functionality and handling drop events."
       },
       {
-        "id": "7",
+        "id": 7,
         "title": "Add Delete and Search/Filter to Media Library",
         "description": "Implement functionality to delete clips from the library with confirmation, and add search/filter by name, duration, or resolution.",
         "details": "Add a delete button to each clip item with a confirmation dialog. On confirm, remove the file from clips directory and update the store. Implement a search input that filters the list based on clip name or metadata (e.g., duration > X seconds). Use state to manage filtered list.",
@@ -1476,7 +1476,7 @@
         "expansionPrompt": "No further expansion needed as the task is already subdivided into delete functionality and search/filter logic."
       },
       {
-        "id": "8",
+        "id": 8,
         "title": "Implement PiP Recording Mode",
         "description": "Add picture-in-picture functionality to overlay webcam on screen recording with adjustable position and size.",
         "details": "Extend the screen recording UI to include a PiP toggle. Use FFmpeg for real-time compositing of webcam stream over screen capture. Add controls for PiP position (corners) and size. Preview the composited view before recording. Ensure audio mixing (microphone + system).",
@@ -1551,21 +1551,21 @@
         "expansionPrompt": "No further expansion needed as the task is already extensively broken into UI extension, FFmpeg compositing, controls, audio mixing, and testing."
       },
       {
-        "id": "9",
+        "id": 9,
         "title": "Add Advanced Audio Controls",
         "description": "Enhance audio capture with level monitoring, mute/unmute controls, and improved mixing.",
         "details": "Add audio level meters in the recording UI using Web Audio API to visualize microphone input. Implement mute/unmute toggles for microphone and system audio. Extend recording commands to handle these controls. Ensure AAC encoding for audio export.",
         "testStrategy": "During recording, check audio levels update in real-time. Test mute/unmute functionality and verify audio is included/excluded in the final recording.",
         "priority": "medium",
         "dependencies": [],
-        "status": "pending",
+        "status": "done",
         "subtasks": [
           {
             "id": 1,
             "title": "Integrate Web Audio API for Audio Level Monitoring",
             "description": "Implement audio level meters in the recording UI using Web Audio API to visualize microphone input levels in real-time.",
             "dependencies": [],
-            "details": "Use Web Audio API to create an analyser node connected to the microphone input stream. Sample the frequency data periodically and update UI level meters (e.g., bars or VU meters) to reflect current audio levels. Ensure the meters are displayed prominently in the recording interface and handle cases where no microphone is available.",
+            "details": "Use Web Audio API to create an analyser node connected to the microphone input stream. Sample the frequency data periodically and update UI level meters (e.g., bars or VU meters) to reflect current audio levels. Ensure the meters are displayed prominently in the recording interface and handle cases where no microphone is available.\n<info added on 2025-10-29T17:02:28.028Z>\nImplemented AudioControls component with Radix UI Slider for volume control (0-100%). Created slider.tsx wrapper component. Added volume and muted fields to Clip interface. Integrated with Plyr player for real-time audio updates. Added default audio values to all clip creation points (import, webcam, screen, PiP recordings). Component displays at bottom of app below timeline with waveform visualization, mute toggle, and audio metadata.\n</info added on 2025-10-29T17:02:28.028Z>",
             "status": "pending",
             "testStrategy": "During a recording session, speak into the microphone and verify that the level meters update in real-time, showing fluctuations based on audio input volume.",
             "parentId": "undefined"
@@ -1593,17 +1593,20 @@
         ],
         "complexity": 7,
         "recommendedSubtasks": 0,
-        "expansionPrompt": "No further expansion needed as the task is already divided into level monitoring, mute toggles, and command extensions."
+        "expansionPrompt": "No further expansion needed as the task is already divided into level monitoring, mute toggles, and command extensions.",
+        "updatedAt": "2025-10-29T17:02:12.031Z"
       }
     ],
     "metadata": {
       "version": "1.0.0",
-      "lastModified": "2025-10-29T14:16:09.241Z",
+      "lastModified": "2025-10-29T17:02:12.032Z",
       "taskCount": 9,
-      "completedCount": 3,
+      "completedCount": 4,
       "tags": [
         "recording"
-      ]
+      ],
+      "created": "2025-10-29T17:02:23.679Z",
+      "description": "Tasks for recording context"
     }
   },
   "timeline": {

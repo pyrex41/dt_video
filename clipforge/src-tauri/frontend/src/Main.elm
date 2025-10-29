@@ -38,6 +38,7 @@ import Html.Attributes exposing (class, id, style)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
+import MediaLibrary
 
 
 
@@ -104,6 +105,12 @@ type alias Clip =
     , trimStart : Float -- Trim in-point (relative to clip start, in seconds)
     , trimEnd : Float -- Trim out-point (relative to clip start, in seconds)
     , track : Int -- Track number: 0 = main track, 1 = PiP track
+    , resolution : String
+    , file_size : Maybe Int
+    , codec : Maybe String
+    , fps : Maybe Float
+    , bit_rate : Maybe Int
+    , thumbnail_path : Maybe String
     }
 
 
@@ -130,7 +137,8 @@ type alias Model =
     , selectedClipId : Maybe String -- ID of currently selected clip
     , clickStartPos : Maybe ( Float, Float ) -- Position where mouse down occurred (for click vs drag detection)
     , recordingMenuOpen : Bool -- Whether the recording dropdown menu is open
-    , recordingState : Maybe RecordingType -- Current recording state (if recording)
+     , recordingState : Maybe RecordingType -- Current recording state (if recording)
+     , mediaLibrary : MediaLibrary.Model -- Media library state
     }
 
 
@@ -151,7 +159,8 @@ init _ =
       , selectedClipId = Nothing
       , clickStartPos = Nothing
       , recordingMenuOpen = False
-      , recordingState = Nothing
+       , recordingState = Nothing
+       , mediaLibrary = MediaLibrary.init
       }
     , Cmd.none
     )
@@ -194,6 +203,9 @@ type Msg
     | RecordingComplete Encode.Value -- Recording finished with clip data
     | ShowMessage MessageType String -- Show a status message
     | DismissMessage -- Dismiss the current message
+    | MediaLibraryMsg MediaLibrary.Msg -- Messages from media library
+    | TimelineDrop Encode.Value -- Drop data on timeline
+    | ThumbnailGenerated Encode.Value -- Thumbnail generated for clip
     | NoOp
 
 
@@ -257,7 +269,7 @@ update msg model =
                         | clips = model.clips ++ [ clip ]
                         , statusMessage = Just ( Success, "Imported: " ++ clip.fileName )
                       }
-                    , Cmd.none
+                    , requestThumbnails [ clip.path ]
                     )
 
                 Err error ->
@@ -863,13 +875,10 @@ update msg model =
                             originalClip
                                 |> Maybe.map .startTime
                                 |> Maybe.withDefault 0.0
-                    in
-                    ( { model
-                        | clips = List.map updateClip model.clips
-                        , statusMessage = Just ( Success, "Trim complete: " ++ trimmedData.fileName )
-                      }
-                    , Cmd.none
-                    )
+                     in
+                     ( { model | statusMessage = Just ( Info, "Drop detected - JavaScript integration needed" ) }
+                     , Cmd.none
+                     )
 
                 Err error ->
                     ( { model | statusMessage = Just ( Error, "Trim processing failed: " ++ Decode.errorToString error ) }
@@ -1155,6 +1164,51 @@ update msg model =
                     , Cmd.none
                     )
 
+        MediaLibraryMsg mediaMsg ->
+            let
+                ( newMediaLibrary, maybeDeleteId ) =
+                    MediaLibrary.update mediaMsg model.mediaLibrary
+            in
+            case maybeDeleteId of
+                Just clipId ->
+                    ( { model
+                        | clips = List.filter (\c -> c.id /= clipId) model.clips
+                        , mediaLibrary = newMediaLibrary
+                      }
+                    , deleteClip clipId
+                    )
+
+                Nothing ->
+                    ( { model | mediaLibrary = newMediaLibrary }
+                    , Cmd.none
+                    )
+
+        TimelineDrop dropData ->
+            -- For now, just show that drop was detected
+            -- The actual clip data transfer needs JavaScript integration
+            ( { model | statusMessage = Just ( Info, "Drop detected - JavaScript integration needed" ) }
+            , Cmd.none
+            )
+
+        ThumbnailGenerated value ->
+            case Decode.decodeValue thumbnailGeneratedDecoder value of
+                Ok ( clipPath, thumbnailPath ) ->
+                    let
+                        updateClip clip =
+                            if clip.path == clipPath then
+                                { clip | thumbnail_path = Just thumbnailPath }
+                            else
+                                clip
+                    in
+                    ( { model | clips = List.map updateClip model.clips }
+                    , Cmd.none
+                    )
+
+                Err error ->
+                    ( { model | statusMessage = Just ( Error, "Thumbnail update failed: " ++ Decode.errorToString error ) }
+                    , Cmd.none
+                    )
+
         NoOp ->
             ( model, Cmd.none )
 
@@ -1349,6 +1403,22 @@ getTimelineDuration model =
         |> Maybe.withDefault 0.0
 
 
+-- Convert Main.Clip to MediaLibrary.Clip for the media library view
+clipToMediaLibraryClip : Clip -> MediaLibrary.Clip
+clipToMediaLibraryClip clip =
+    { id = clip.id
+    , path = clip.path
+    , fileName = clip.fileName
+    , duration = clip.duration
+    , resolution = clip.resolution
+    , file_size = clip.file_size
+    , codec = clip.codec
+    , fps = clip.fps
+    , bit_rate = clip.bit_rate
+    , thumbnail_path = clip.thumbnail_path
+    }
+
+
 
 -- KEYBOARD HANDLING
 -- Keyboard decoder for keyboard shortcuts
@@ -1425,6 +1495,12 @@ clipDecoder =
                         , trimStart = trimStart
                         , trimEnd = duration -- Default: trim at end of clip
                         , track = track
+                        , resolution = String.fromInt width ++ "x" ++ String.fromInt height
+                        , file_size = Nothing
+                        , codec = Nothing
+                        , fps = Nothing
+                        , bit_rate = Nothing
+                        , thumbnail_path = Nothing
                         }
                     )
                     (Decode.field "id" Decode.string)
@@ -1437,7 +1513,7 @@ clipDecoder =
                     (Decode.succeed 0.0)
                     -- trimStart default: no trim at start
                     (Decode.succeed 0)
-             -- track default: main track (0)
+              -- track default: main track (0)
             )
 
 
@@ -1460,6 +1536,41 @@ trimCompleteDecoder =
         (Decode.field "duration" Decode.float)
         (Decode.field "width" Decode.int)
         (Decode.field "height" Decode.int)
+
+
+mediaLibraryClipDecoder : Decoder MediaLibrary.Clip
+mediaLibraryClipDecoder =
+    Decode.map5
+        (\id path fileName duration resolution ->
+            { id = id
+            , path = path
+            , fileName = fileName
+            , duration = duration
+            , resolution = resolution
+            , file_size = Nothing
+            , codec = Nothing
+            , fps = Nothing
+            , bit_rate = Nothing
+            , thumbnail_path = Nothing
+            }
+        )
+        (Decode.field "id" Decode.string)
+        (Decode.field "path" Decode.string)
+        (Decode.field "fileName" Decode.string)
+        (Decode.field "duration" Decode.float)
+        (Decode.field "resolution" Decode.string)
+
+
+timelineDropDecoder : Decoder Float
+timelineDropDecoder =
+    Decode.field "dropTime" Decode.float
+
+
+thumbnailGeneratedDecoder : Decoder ( String, String )
+thumbnailGeneratedDecoder =
+    Decode.map2 Tuple.pair
+        (Decode.field "clipPath" Decode.string)
+        (Decode.field "thumbnailPath" Decode.string)
 
 
 
@@ -1508,6 +1619,18 @@ port stopRecording : () -> Cmd msg
 port recordingComplete : (Encode.Value -> msg) -> Sub msg
 
 
+port deleteClip : String -> Cmd msg
+
+
+port timelineDrop : (Encode.Value -> msg) -> Sub msg
+
+
+port requestThumbnails : List String -> Cmd msg
+
+
+port thumbnailGenerated : (Encode.Value -> msg) -> Sub msg
+
+
 
 -- SUBSCRIPTIONS
 
@@ -1522,6 +1645,8 @@ subscriptions model =
             , trimComplete TrimComplete
             , exportProgress ExportProgress
             , recordingComplete RecordingComplete
+            , timelineDrop TimelineDrop
+            , thumbnailGenerated ThumbnailGenerated
             , Browser.Events.onKeyDown keyDecoder -- Keyboard shortcuts
             ]
 
@@ -1611,6 +1736,7 @@ viewMainContent model =
             [ viewImportArea model
             , viewTimeline model
             ]
+        , Html.map MediaLibraryMsg (MediaLibrary.view (List.map clipToMediaLibraryClip model.clips) model.mediaLibrary)
         , viewPreview model
         ]
 

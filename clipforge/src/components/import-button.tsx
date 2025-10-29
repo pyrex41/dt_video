@@ -69,6 +69,8 @@ export function ImportButton() {
             codec: metadata.codec,
             fps: metadata.fps,
             bit_rate: metadata.bit_rate,
+            volume: 1, // Default volume at 100%
+            muted: false, // Default not muted
           }
 
           addClip(newClip)
