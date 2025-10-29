@@ -94,6 +94,8 @@ pnpm run tauri:react
 This launches the desktop application with hot reloading.
 
 #### Elm Frontend
+> **Note:** The Elm frontend is currently stale and not up-to-date with the latest features and bug fixes. The Preact frontend is the actively maintained and recommended option.
+
 ```bash
 # Switch to Elm frontend
 pnpm run use-elm

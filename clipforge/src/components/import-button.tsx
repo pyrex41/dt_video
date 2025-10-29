@@ -10,6 +10,7 @@ import type { Clip, VideoMetadata } from "../types/clip"
 
 export function ImportButton() {
   const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 })
   const { addClip, setError, clips } = useClipStore()
 
   const handleImport = async () => {
@@ -33,13 +34,18 @@ export function ImportButton() {
       const files = Array.isArray(selected) ? selected : [selected]
       if (files.length === 0) return
 
+      // Initialize progress tracking
+      setImportProgress({ current: 0, total: files.length })
+
       // Import each file sequentially
       let importedCount = 0
       let failedCount = 0
       const errors: string[] = []
       let currentEnd = clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0
 
-      for (const filePath of files) {
+      for (let i = 0; i < files.length; i++) {
+        const filePath = files[i]
+        setImportProgress({ current: i + 1, total: files.length })
         try {
           const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "video.mp4"
 
@@ -90,13 +96,18 @@ export function ImportButton() {
       console.error("[v0] Import error:", err)
     } finally {
       setIsImporting(false)
+      setImportProgress({ current: 0, total: 0 })
     }
   }
 
+  const progressPercentage = importProgress.total > 0
+    ? Math.round((importProgress.current / importProgress.total) * 100)
+    : 0
+
   return (
     <div className="relative group">
-      <Button 
-        onClick={handleImport} 
+      <Button
+        onClick={handleImport}
         disabled={isImporting}
         variant="ghost"
         size="icon"
@@ -108,6 +119,23 @@ export function ImportButton() {
           <Upload className="h-6 w-6" />
         )}
       </Button>
+
+      {/* Progress Indicator */}
+      {isImporting && importProgress.total > 1 && (
+        <div className="absolute -bottom-14 left-1/2 transform -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg p-2 shadow-xl z-20 min-w-[200px]">
+          <div className="text-xs text-zinc-300 mb-1 text-center">
+            Importing {importProgress.current} of {importProgress.total}
+          </div>
+          <div className="w-full bg-zinc-700 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-blue-500 h-full transition-all duration-300 ease-out"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+          <div className="text-xs text-zinc-500 mt-1 text-center">{progressPercentage}%</div>
+        </div>
+      )}
+
       <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-zinc-800 text-white text-xs px-3 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-10 shadow-lg">
         Import Video
       </div>

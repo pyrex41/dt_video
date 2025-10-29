@@ -1,15 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { convertFileSrc } from "@tauri-apps/api/tauri"
 import { Button } from "./ui/button"
-import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp } from "lucide-react"
+import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp, Search, Trash2, X } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
+import { Input } from "./ui/input"
 
 export function MediaLibrary() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null)
-  const { clips } = useClipStore()
+  const [searchQuery, setSearchQuery] = useState("")
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const { clips, deleteClip } = useClipStore()
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
@@ -28,6 +31,45 @@ export function MediaLibrary() {
     if (bps < 1000) return `${bps} bps`
     if (bps < 1000000) return `${(bps / 1000).toFixed(0)} kbps`
     return `${(bps / 1000000).toFixed(1)} Mbps`
+  }
+
+  // Filter and search logic
+  const filteredClips = useMemo(() => {
+    if (!searchQuery) return clips
+
+    const query = searchQuery.toLowerCase()
+    return clips.filter((clip) => {
+      // Search by name
+      if (clip.name.toLowerCase().includes(query)) return true
+
+      // Search by codec
+      if (clip.codec && clip.codec.toLowerCase().includes(query)) return true
+
+      // Search by resolution
+      if (clip.resolution && clip.resolution.toLowerCase().includes(query)) return true
+
+      // Search by file size (e.g., "5MB", "100KB")
+      if (clip.file_size) {
+        const sizeStr = formatFileSize(clip.file_size).toLowerCase()
+        if (sizeStr.includes(query)) return true
+      }
+
+      // Search by FPS
+      if (clip.fps && clip.fps.toString().includes(query)) return true
+
+      return false
+    })
+  }, [clips, searchQuery])
+
+  const handleDelete = async (clipId: string) => {
+    try {
+      await deleteClip(clipId)
+      setDeleteConfirmId(null)
+      setExpandedClipId(null)
+    } catch (err) {
+      console.error('[MediaLibrary] Delete failed:', err)
+      alert('Failed to delete clip. Please try again.')
+    }
   }
 
   return (
@@ -61,13 +103,35 @@ export function MediaLibrary() {
       ) : (
         <>
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-zinc-700">
-            <div className="flex items-center gap-2">
-              <Film className="h-5 w-5 text-blue-500" />
-              <h2 className="text-lg font-semibold">Media Library</h2>
+          <div className="p-4 border-b border-zinc-700 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Film className="h-5 w-5 text-blue-500" />
+                <h2 className="text-lg font-semibold">Media Library</h2>
+              </div>
+              <div className="text-xs text-zinc-500">
+                {filteredClips.length} of {clips.length}
+              </div>
             </div>
-            <div className="text-xs text-zinc-500">
-              {clips.length} {clips.length === 1 ? "clip" : "clips"}
+
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+              <Input
+                type="text"
+                placeholder="Search by name, codec, resolution..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-9 bg-zinc-800 border-zinc-700 text-sm h-9 focus:border-blue-500"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -79,8 +143,14 @@ export function MediaLibrary() {
                 <p className="text-sm">No clips yet</p>
                 <p className="text-xs mt-1">Import videos to get started</p>
               </div>
+            ) : filteredClips.length === 0 ? (
+              <div className="text-center text-zinc-500 py-8">
+                <Search className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No results found</p>
+                <p className="text-xs mt-1">Try a different search term</p>
+              </div>
             ) : (
-              clips.map((clip) => (
+              filteredClips.map((clip) => (
                 <div
                   key={clip.id}
                   draggable
@@ -165,26 +235,64 @@ export function MediaLibrary() {
                       </div>
                     )}
 
-                    {/* Expand/Collapse Button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setExpandedClipId(expandedClipId === clip.id ? null : clip.id)
-                      }}
-                      className="w-full mt-1 pt-1 flex items-center justify-center text-xs text-zinc-500 hover:text-blue-400 transition-colors border-t border-zinc-700"
-                    >
-                      {expandedClipId === clip.id ? (
+                    {/* Action Buttons */}
+                    <div className="flex gap-1 mt-2 border-t border-zinc-700 pt-2">
+                      {deleteConfirmId === clip.id ? (
                         <>
-                          <ChevronUp className="h-3 w-3 mr-1" />
-                          Less
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDelete(clip.id)
+                            }}
+                            className="flex-1 py-1.5 px-2 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Confirm Delete
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteConfirmId(null)
+                            }}
+                            className="flex-1 py-1.5 px-2 text-xs bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
+                          >
+                            Cancel
+                          </button>
                         </>
                       ) : (
                         <>
-                          <ChevronDown className="h-3 w-3 mr-1" />
-                          More
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedClipId(expandedClipId === clip.id ? null : clip.id)
+                            }}
+                            className="flex-1 py-1.5 px-2 text-xs text-zinc-500 hover:text-blue-400 hover:bg-zinc-700 rounded transition-colors flex items-center justify-center gap-1"
+                          >
+                            {expandedClipId === clip.id ? (
+                              <>
+                                <ChevronUp className="h-3 w-3" />
+                                Less
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-3 w-3" />
+                                More
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setDeleteConfirmId(clip.id)
+                            }}
+                            className="py-1.5 px-3 text-xs text-red-400 hover:text-red-300 hover:bg-zinc-700 rounded transition-colors flex items-center gap-1"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            Delete
+                          </button>
                         </>
                       )}
-                    </button>
+                    </div>
                   </div>
                 </div>
               ))
