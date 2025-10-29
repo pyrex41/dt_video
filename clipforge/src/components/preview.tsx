@@ -11,6 +11,7 @@ export function Preview() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const playerRef = useRef<Plyr | null>(null)
   const isUpdatingFromPlayer = useRef(false)
+  const isUpdatingPlayState = useRef(false)
   const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const { clips, playhead, isPlaying, setPlayhead, setIsPlaying } = useClipStore()
@@ -27,20 +28,11 @@ export function Preview() {
     const video = videoRef.current
     setIsLoading(true)
 
-    // Wait for video to load before initializing Plyr
-    const handleLoadedData = () => {
-      console.log('[ClipForge] Video loaded for clip:', currentClip.id)
-      setIsLoading(false)
-
-      // Clear loading timeout
-      if (loadingTimeoutRef.current) {
-        clearTimeout(loadingTimeoutRef.current)
-        loadingTimeoutRef.current = null
-      }
-
-      // Completely reset any existing player and media
-      if (playerRef.current) {
-        const oldPlayer = playerRef.current
+    // Completely reset any existing player and media BEFORE loading new video
+    if (playerRef.current) {
+      const oldPlayer = playerRef.current
+      console.log('[ClipForge] Destroying old player instance')
+      try {
         // Stop media playback completely
         // @ts-ignore
         if (oldPlayer.media) {
@@ -50,8 +42,38 @@ export function Preview() {
           oldPlayer.media.currentTime = 0
           // @ts-ignore
           oldPlayer.media.src = ''
+          // @ts-ignore
+          oldPlayer.media.load() // Force reload to clear buffer
         }
         oldPlayer.destroy()
+        playerRef.current = null
+      } catch (err) {
+        console.error('[ClipForge] Error destroying old player:', err)
+        playerRef.current = null
+      }
+    }
+
+    // Clean up any orphaned Plyr DOM elements (from HMR or incomplete cleanups)
+    const container = video.parentElement
+    if (container) {
+      const plyrContainers = container.querySelectorAll('.plyr')
+      plyrContainers.forEach((plyrEl, index) => {
+        if (index > 0) { // Keep only the first one (current video)
+          console.log('[ClipForge] Removing orphaned Plyr container')
+          plyrEl.remove()
+        }
+      })
+    }
+
+    // Wait for video to load before initializing Plyr
+    const handleLoadedData = () => {
+      console.log('[ClipForge] Video loaded for clip:', currentClip.id)
+      setIsLoading(false)
+
+      // Clear loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current)
+        loadingTimeoutRef.current = null
       }
 
       playerRef.current = new Plyr(video, {
@@ -84,8 +106,28 @@ export function Preview() {
         }
       })
 
-      player.on("play", () => setIsPlaying(true))
-      player.on("pause", () => setIsPlaying(false))
+      // Sync play state from player events (with debounce to prevent race conditions)
+      player.on("play", () => {
+        if (!isUpdatingPlayState.current) {
+          isUpdatingPlayState.current = true
+          setIsPlaying(true)
+          setTimeout(() => { isUpdatingPlayState.current = false }, 100)
+        }
+      })
+
+      player.on("pause", () => {
+        if (!isUpdatingPlayState.current) {
+          isUpdatingPlayState.current = true
+          setIsPlaying(false)
+          setTimeout(() => { isUpdatingPlayState.current = false }, 100)
+        }
+      })
+
+      // Handle play errors (buffering, network issues, etc.)
+      player.on("error", (error: any) => {
+        console.error('[ClipForge] Player error:', error)
+        setIsPlaying(false)
+      })
 
        // Seek to correct position after loading, respecting trim bounds
        let clipLocalTime = playhead - currentClip.start
@@ -100,7 +142,14 @@ export function Preview() {
       // Resume playback if it was playing
       if (isPlaying) {
         console.log('[ClipForge] Resuming playback for clip:', currentClip.id)
-        player.play()
+        isUpdatingPlayState.current = true
+        player.play().then(() => {
+          setTimeout(() => { isUpdatingPlayState.current = false }, 100)
+        }).catch((err) => {
+          console.error('[ClipForge] Failed to resume playback:', err)
+          setIsPlaying(false)
+          isUpdatingPlayState.current = false
+        })
       }
     }
 
@@ -127,24 +176,36 @@ export function Preview() {
     return () => {
       video.removeEventListener('loadeddata', handleLoadedData)
       video.removeEventListener('error', handleError)
+
       // Clear loading timeout
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current)
         loadingTimeoutRef.current = null
       }
+
+      // Clean up player on unmount
       if (playerRef.current) {
         const player = playerRef.current
-        // Complete media reset before destruction
-        // @ts-ignore
-        if (player.media) {
+        console.log('[ClipForge] Cleanup: destroying player')
+        try {
+          // Complete media reset before destruction
           // @ts-ignore
-          player.media.pause()
-          // @ts-ignore
-          player.media.currentTime = 0
-          // @ts-ignore
-          player.media.src = ''
+          if (player.media) {
+            // @ts-ignore
+            player.media.pause()
+            // @ts-ignore
+            player.media.currentTime = 0
+            // @ts-ignore
+            player.media.src = ''
+            // @ts-ignore
+            player.media.load() // Force clear
+          }
+          player.destroy()
+          playerRef.current = null
+        } catch (err) {
+          console.error('[ClipForge] Error during cleanup:', err)
+          playerRef.current = null
         }
-        player.destroy()
       }
     }
   }, [currentClip, volume, muted])
@@ -177,10 +238,23 @@ export function Preview() {
       }
     }
 
-    if (isPlaying && player.paused) {
-      player.play()
-    } else if (!isPlaying && !player.paused) {
-      player.pause()
+    // Sync play/pause state with guard against race conditions
+    if (!isUpdatingPlayState.current) {
+      if (isPlaying && player.paused) {
+        isUpdatingPlayState.current = true
+        player.play().then(() => {
+          console.log('[ClipForge] Play started successfully')
+          setTimeout(() => { isUpdatingPlayState.current = false }, 100)
+        }).catch((err) => {
+          console.error('[ClipForge] Play failed:', err)
+          setIsPlaying(false)
+          isUpdatingPlayState.current = false
+        })
+      } else if (!isPlaying && !player.paused) {
+        isUpdatingPlayState.current = true
+        player.pause()
+        setTimeout(() => { isUpdatingPlayState.current = false }, 100)
+      }
     }
   }, [playhead, isPlaying, currentClip?.id, currentClip?.trimStart, currentClip?.trimEnd])
 
