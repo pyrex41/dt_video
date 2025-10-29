@@ -1,0 +1,32 @@
+{
+  "ffmpeg-aarch64-apple-darwin": {
+    "path": "ffmpeg-aarch64-apple-darwin",
+    "checksum": "992c6457adb4f79c0ee51dd4fed002b236692c013bf355f91039ce822c130bdf",
+    "version": "6.1"
+  },
+  "ffprobe-aarch64-apple-darwin": {
+    "path": "ffprobe-aarch64-apple-darwin",
+    "checksum": "18849ebcca51c0d0a97ed0baae6e56492506fbda9578cecc67ae13f3f0265a3a",
+    "version": "6.1"
+  },
+  "ffmpeg-x86_64-pc-windows-msvc.exe": {
+    "path": "ffmpeg-x86_64-pc-windows-msvc.exe",
+    "checksum": "ba242553f0ff60ad788069d5d376c1b4f7a2f3a3566416e0ed950ca7920da5fa",
+    "version": "6.1"
+  },
+  "ffprobe-x86_64-pc-windows-msvc.exe": {
+    "path": "ffprobe-x86_64-pc-windows-msvc.exe",
+    "checksum": "ae5db42a4b7d7fa719a325082e447adb5df674a69935117eb9dff2292a1f23ec",
+    "version": "6.1"
+  },
+  "ffmpeg-x86_64-unknown-linux-gnu": {
+    "path": "ffmpeg-x86_64-unknown-linux-gnu",
+    "checksum": "a0082b064cc83f5606554fa2cc5b07194ade90f6669b1fcfd6499b29861ca403",
+    "version": "6.1"
+  },
+  "ffprobe-x86_64-unknown-linux-gnu": {
+    "path": "ffprobe-x86_64-unknown-linux-gnu",
+    "checksum": "c2b0313686684e48f5dedbe29e510d56e70dead57a5e4219d32c6db32455c32a",
+    "version": "6.1"
+  }
+}

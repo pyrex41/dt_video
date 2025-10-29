@@ -1,52 +1,39 @@
 {
+  "productName": "ClipForge",
+  "version": "0.1.0",
+  "identifier": "com.clipforge.dev",
   "build": {
-    "beforeDevCommand": "cd .. && pnpm run dev",
-    "beforeBuildCommand": "cd .. && pnpm run build",
-    "devPath": "http://localhost:1420",
-    "distDir": "../dist",
-    "withGlobalTauri": false
+    "beforeDevCommand": "pnpm run dev",
+    "beforeBuildCommand": "pnpm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
   },
-  "package": {
-    "productName": "ClipForge",
-    "version": "0.1.0"
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/ffmpeg",
+      "binaries/ffprobe"
+    ],
+    "macOS": {
+      "entitlements": "Entitlements.plist"
+    }
   },
-  "tauri": {
-    "allowlist": {
-      "all": true,
-      "protocol": {
-        "asset": true,
-        "assetScope": ["$APPDATA/clips/**"]
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.clipforge.dev",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "externalBin": [
-        "binaries/ffmpeg",
-        "binaries/ffprobe"
-      ],
-      "macOS": {
-        "entitlements": "Entitlements.plist"
-      }
-    },
+  "app": {
     "security": {
-      "csp": "default-src 'self' blob: data: filesystem: http://tauri.localhost asset: tauri:"
+      "csp": null
     },
     "windows": [
       {
-        "fullscreen": false,
+        "title": "ClipForge",
+        "width": 1200,
+        "height": 800,
         "resizable": true,
-        "title": "ClipForge (React)",
-        "width": 800,
-        "height": 600
+        "fullscreen": false
       }
     ]
   }

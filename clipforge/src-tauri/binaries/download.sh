@@ -56,11 +56,11 @@ update_manifest() {
 }
 
 download_macos_arm64() {
-    echo "Downloading macOS ARM64 binaries (FFmpeg $FFMPEG_VERSION)..."
+    echo "Downloading macOS ARM64 binaries (FFmpeg latest)..."
 
     # Download FFmpeg
     echo "  - Downloading ffmpeg..."
-    local ffmpeg_url="https://ffmpeg.martin-riedl.de/redirect/$FFMPEG_VERSION/macos/arm64/release/ffmpeg.zip"
+    local ffmpeg_url="https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip"
     curl -L "$ffmpeg_url" -o ffmpeg-macos-arm64.zip
 
     # Verify and extract
@@ -76,7 +76,7 @@ download_macos_arm64() {
 
     # Download FFprobe
     echo "  - Downloading ffprobe..."
-    local ffprobe_url="https://ffmpeg.martin-riedl.de/redirect/$FFMPEG_VERSION/macos/arm64/release/ffprobe.zip"
+    local ffprobe_url="https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffprobe.zip"
     curl -L "$ffprobe_url" -o ffprobe-macos-arm64.zip
 
     unzip -q ffprobe-macos-arm64.zip
