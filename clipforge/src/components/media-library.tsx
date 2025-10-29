@@ -3,17 +3,31 @@
 import { useState } from "react"
 import { convertFileSrc } from "@tauri-apps/api/tauri"
 import { Button } from "./ui/button"
-import { ChevronLeft, ChevronRight, Film } from "lucide-react"
+import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 
 export function MediaLibrary() {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [expandedClipId, setExpandedClipId] = useState<string | null>(null)
   const { clips } = useClipStore()
 
   const formatDuration = (seconds: number): string => {
     const mins = Math.floor(seconds / 60)
     const secs = Math.floor(seconds % 60)
     return `${mins}:${secs.toString().padStart(2, "0")}`
+  }
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+  }
+
+  const formatBitRate = (bps: number): string => {
+    if (bps < 1000) return `${bps} bps`
+    if (bps < 1000000) return `${(bps / 1000).toFixed(0)} kbps`
+    return `${(bps / 1000000).toFixed(1)} Mbps`
   }
 
   return (
@@ -107,11 +121,70 @@ export function MediaLibrary() {
                     <p className="text-sm font-medium truncate" title={clip.name}>
                       {clip.name}
                     </p>
+
+                    {/* Basic Metadata Row */}
                     <div className="flex items-center justify-between text-xs text-zinc-500">
                       <span>{formatDuration(clip.duration)}</span>
                       <span className="text-zinc-600">•</span>
                       <span>{clip.resolution || "Unknown"}</span>
+                      {clip.file_size && (
+                        <>
+                          <span className="text-zinc-600">•</span>
+                          <span>{formatFileSize(clip.file_size)}</span>
+                        </>
+                      )}
                     </div>
+
+                    {/* Expandable Details */}
+                    {expandedClipId === clip.id && (
+                      <div className="mt-2 pt-2 border-t border-zinc-700 space-y-1 text-xs">
+                        {clip.codec && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Codec:</span>
+                            <span className="text-zinc-300 font-mono">{clip.codec.toUpperCase()}</span>
+                          </div>
+                        )}
+                        {clip.fps && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Frame Rate:</span>
+                            <span className="text-zinc-300">{clip.fps.toFixed(2)} fps</span>
+                          </div>
+                        )}
+                        {clip.bit_rate && (
+                          <div className="flex justify-between">
+                            <span className="text-zinc-500">Bit Rate:</span>
+                            <span className="text-zinc-300">{formatBitRate(clip.bit_rate)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-zinc-500">Trim Range:</span>
+                          <span className="text-zinc-300">
+                            {formatDuration(clip.trimStart)} - {formatDuration(clip.trimEnd)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Expand/Collapse Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setExpandedClipId(expandedClipId === clip.id ? null : clip.id)
+                      }}
+                      className="w-full mt-1 pt-1 flex items-center justify-center text-xs text-zinc-500 hover:text-blue-400 transition-colors border-t border-zinc-700"
+                    >
+                      {expandedClipId === clip.id ? (
+                        <>
+                          <ChevronUp className="h-3 w-3 mr-1" />
+                          Less
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3 mr-1" />
+                          More
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               ))

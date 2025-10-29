@@ -11,6 +11,9 @@ export interface Clip {
   resolution?: string
   fps?: number
   thumbnail_path?: string
+  file_size?: number
+  codec?: string
+  bit_rate?: number
 }
 
 export interface VideoMetadata {
@@ -19,4 +22,8 @@ export interface VideoMetadata {
   height: number
   file_path: string
   thumbnail_path?: string
+  file_size: number
+  codec?: string
+  fps?: number
+  bit_rate?: number
 }

@@ -59,6 +59,10 @@ export function ImportButton() {
             trimEnd: metadata.duration,
             resolution: `${metadata.width}x${metadata.height}`,
             thumbnail_path: metadata.thumbnail_path,
+            file_size: metadata.file_size,
+            codec: metadata.codec,
+            fps: metadata.fps,
+            bit_rate: metadata.bit_rate,
           }
 
           addClip(newClip)

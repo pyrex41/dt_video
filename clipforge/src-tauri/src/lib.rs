@@ -18,6 +18,10 @@ struct VideoMetadata {
     height: u32,
     file_path: String,
     thumbnail_path: Option<String>,
+    file_size: u64,
+    codec: Option<String>,
+    fps: Option<f64>,
+    bit_rate: Option<u64>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -86,7 +90,7 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
         .args(&[
             "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,duration",
+            "-show_entries", "stream=width,height,duration,codec_name,r_frame_rate,bit_rate",
             "-of", "json",
             &file_path
         ])
@@ -113,6 +117,25 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
         .and_then(|s| s.parse::<f64>().ok())
         .ok_or("Missing or invalid duration in metadata")?;
 
+    // Extract codec name
+    let codec = stream["codec_name"].as_str().map(|s| s.to_string());
+
+    // Extract and parse frame rate (format: "30000/1001" or "30")
+    let fps = stream["r_frame_rate"].as_str().and_then(|fps_str| {
+        let parts: Vec<&str> = fps_str.split('/').collect();
+        if parts.len() == 2 {
+            let num: f64 = parts[0].parse().ok()?;
+            let den: f64 = parts[1].parse().ok()?;
+            Some(num / den)
+        } else {
+            fps_str.parse::<f64>().ok()
+        }
+    });
+
+    // Extract bit rate
+    let bit_rate = stream["bit_rate"].as_str()
+        .and_then(|s| s.parse::<u64>().ok());
+
     // Get app data directory and create clips subdirectory
     let app_data_dir = app_handle.path_resolver()
         .app_data_dir()
@@ -127,6 +150,11 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
     let dest_path = clips_dir.join(file_name);
     fs::copy(&file_path, &dest_path)
         .map_err(|e| format!("Failed to copy file: {}", e))?;
+
+    // Get file size from the destination file
+    let file_size = fs::metadata(&dest_path)
+        .map_err(|e| format!("Failed to get file metadata: {}", e))?
+        .len();
 
     let dest_path_str = dest_path.to_str()
         .ok_or("Invalid destination path")?
@@ -148,6 +176,10 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
         height,
         file_path: dest_path_str,
         thumbnail_path,
+        file_size,
+        codec,
+        fps,
+        bit_rate,
     })
 }
 
