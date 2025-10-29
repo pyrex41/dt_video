@@ -1,0 +1,22 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": 1,
+        "title": "Implement concat button for clip tracks",
+        "description": "Add a concat button that takes all clips stacked as tracks, trims them to match (handles overlaps), and stitches into single track",
+        "details": "The concat button should:\n1. Sort clips by timeline position\n2. For each clip, check if it overlaps with the next clip\n3. If overlapping, trim the current clip to end where the next clip starts\n4. Process each trimmed clip individually, then concatenate them\n5. Save the result to clips/edited/ directory\n\nFrontend: Add purple concat button in controls.tsx with progress feedback\nBackend: Implement concat_clips Tauri command using FFmpeg concat demuxer\nStore: Add concatClips function to handle overlap trimming logic",
+        "testStrategy": "1. Import multiple video clips\n2. Arrange them on timeline with some overlaps\n3. Click concat button\n4. Verify progress bar shows during processing\n5. Check that output file is created in clips/edited/\n6. Verify that overlapping clips are properly trimmed\n7. Test with clips that don't overlap (should concatenate sequentially)",
+        "dependencies": [],
+        "priority": "high",
+        "status": "done",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "created": "2025-10-29T23:20:31.969Z",
+      "updated": "2025-10-29T23:20:31.970Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

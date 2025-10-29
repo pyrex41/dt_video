@@ -852,6 +852,107 @@ async fn delete_clip(file_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn concat_clips(
+    clips: Vec<ClipExportInfo>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    // Validate inputs
+    if clips.is_empty() {
+        return Err("No clips provided for concat".to_string());
+    }
+
+    // Validate all input files exist
+    for clip in &clips {
+        let path = Path::new(&clip.path);
+        if !path.exists() {
+            return Err(format!("Clip not found: {}", clip.path));
+        }
+    }
+
+    // Get app data directory for temp files and output
+    let app_data_dir = app_handle.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+    let clips_dir = app_data_dir.join("clips");
+    let edited_dir = clips_dir.join("edited");
+
+    // Create edited directory if it doesn't exist
+    fs::create_dir_all(&edited_dir)
+        .map_err(|e| format!("Failed to create edited directory: {}", e))?;
+
+    // Generate output filename with timestamp
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let output_filename = format!("concat_{}.mp4", timestamp);
+    let output_path = edited_dir.join(&output_filename);
+
+    // Calculate total duration for progress
+    let total_duration: f64 = clips.iter().map(|c| c.trim_end - c.trim_start).sum();
+
+    // For concat with trims, we need to pre-process each clip first
+    // Then concatenate the trimmed versions
+    let mut trimmed_clip_paths = Vec::new();
+
+    for (i, clip) in clips.iter().enumerate() {
+        let temp_output = app_data_dir.join(format!("temp_concat_clip_{}.mp4", i));
+        let duration = clip.trim_end - clip.trim_start;
+
+        // Use builder for individual clip processing
+        let result = utils::ffmpeg::FfmpegBuilder::new()
+            .input(&clip.path)
+            .trim(clip.trim_start, duration)
+            .stream_copy()
+            .output(temp_output.to_str().ok_or("Invalid temp path")?)
+            .run(&app_handle);
+
+        if let Err(e) = result {
+            return Err(format!("Failed to process clip {}: {}", i, e));
+        }
+
+        trimmed_clip_paths.push(temp_output);
+    }
+
+    // Create concat list file
+    let concat_list_path = app_data_dir.join("concat_list.txt");
+    let mut concat_file = fs::File::create(&concat_list_path)
+        .map_err(|e| format!("Failed to create concat list file: {}", e))?;
+
+    // Write concat demuxer format with trimmed clips
+    for temp_path in &trimmed_clip_paths {
+        writeln!(concat_file, "file '{}'", temp_path.to_str().ok_or("Invalid path")?)
+            .map_err(|e| format!("Failed to write to concat list: {}", e))?;
+    }
+
+    // Flush to ensure file is written
+    concat_file.flush()
+        .map_err(|e| format!("Failed to flush concat list: {}", e))?;
+    drop(concat_file); // Close file
+
+    // Use builder for concat operation
+    let result = utils::ffmpeg::FfmpegBuilder::new()
+        .concat(concat_list_path.to_str().ok_or("Invalid concat list path")?)
+        .stream_copy()
+        .with_progress()
+        .output(output_path.to_str().ok_or("Invalid output path")?)
+        .run_with_progress(&app_handle, Some(total_duration))
+        .await;
+
+    // Clean up temp files
+    for temp_path in &trimmed_clip_paths {
+        let _ = fs::remove_file(temp_path);
+    }
+    let _ = fs::remove_file(&concat_list_path);
+
+    match result {
+        Ok(_) => Ok(output_path.to_str().ok_or("Invalid output path")?.to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
 async fn reset_workspace(app_handle: tauri::AppHandle) -> Result<(), String> {
     let app_data_dir = app_handle.path()
         .app_data_dir()
@@ -916,7 +1017,7 @@ pub fn run() {
 
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, regenerate_thumbnails, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
+    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, regenerate_thumbnails, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace, concat_clips])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

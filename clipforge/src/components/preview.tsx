@@ -11,8 +11,8 @@ export function Preview() {
   const playerRef = useRef<Plyr | null>(null)
   const isUpdatingFromPlayer = useRef(false)
   const isUpdatingPlayState = useRef(false)
-  const isLoadingNewSource = useRef(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [isLoadingNewSource, setIsLoadingNewSource] = useState(false)
   const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip, selectedClipId } = useClipStore()
 
   // If a clip is selected (clicked in timeline), use that clip
@@ -115,8 +115,8 @@ export function Preview() {
     const convertedSrc = convertFileSrc(currentClip.path)
     console.log('[ClipForge] Setting Plyr source:', currentClip.path, '→', convertedSrc)
 
-    // Mark that we're loading a new source - this prevents premature syncing
-    isLoadingNewSource.current = true
+    // Mark that we're loading a new source
+    setIsLoadingNewSource(true)
 
     // Use Plyr's source API to change the video
     player.source = {
@@ -131,8 +131,17 @@ export function Preview() {
     player.volume = volume
     player.muted = muted
 
-    // The playhead sync effect (below) will handle seeking once the video is ready
-    console.log('[ClipForge] Source set, waiting for metadata to load...')
+    // Set up a one-time listener for when metadata loads
+    const handleMetadataLoaded = () => {
+      console.log('[ClipForge] New source metadata loaded')
+      setIsLoadingNewSource(false)
+    }
+
+    videoRef.current?.addEventListener('loadedmetadata', handleMetadataLoaded, { once: true })
+
+    return () => {
+      videoRef.current?.removeEventListener('loadedmetadata', handleMetadataLoaded)
+    }
   }, [currentClip?.id, volume, muted]) // Re-run when clip ID or audio settings change
 
   // Apply audio settings when they change
@@ -142,6 +151,28 @@ export function Preview() {
     player.volume = volume
     player.muted = muted
   }, [volume, muted])
+
+  // When a new source finishes loading, seek to the correct position
+  useEffect(() => {
+    if (isLoadingNewSource || !playerRef.current || !currentClip || !videoRef.current) return
+
+    // Source just finished loading, seek to correct position
+    const player = playerRef.current
+    const clipLocalTime = Math.max(
+      currentClip.trimStart,
+      Math.min(currentClip.trimEnd, playhead - currentClip.start)
+    )
+
+    // Wait a tiny bit for the video element to be fully ready
+    const seekTimer = setTimeout(() => {
+      if (videoRef.current && videoRef.current.readyState >= 2) {
+        console.log('[ClipForge] Source loaded, seeking to:', clipLocalTime)
+        player.currentTime = clipLocalTime
+      }
+    }, 50)
+
+    return () => clearTimeout(seekTimer)
+  }, [isLoadingNewSource]) // Run when isLoadingNewSource changes from true to false
 
   // When a clip is selected, jump playhead to that clip's start if not already in bounds
   // Also clear selection if playhead moves outside the selected clip
@@ -170,44 +201,25 @@ export function Preview() {
   useEffect(() => {
     if (!playerRef.current || !currentClip || isUpdatingFromPlayer.current) return
 
+    // Don't try to sync if we're loading a new source - wait for it to finish
+    if (isLoadingNewSource) {
+      console.log('[ClipForge] Skipping sync - waiting for new source to load')
+      return
+    }
+
     const player = playerRef.current
     let clipLocalTime = playhead - currentClip.start
 
     // Constrain to trim bounds
     clipLocalTime = Math.max(currentClip.trimStart, Math.min(currentClip.trimEnd, clipLocalTime))
 
-    // Update video time if loaded OR wait for it to load
-    const syncTime = () => {
-      // Recalculate clipLocalTime from current state to avoid stale closure values
-      const currentPlayhead = useClipStore.getState().playhead
-      const freshClipLocalTime = Math.max(
-        currentClip.trimStart,
-        Math.min(currentClip.trimEnd, currentPlayhead - currentClip.start)
-      )
-
-      const timeDiff = Math.abs(player.currentTime - freshClipLocalTime)
+    // Only sync if video is ready
+    if (videoRef.current && videoRef.current.readyState >= 2) {
+      const timeDiff = Math.abs(player.currentTime - clipLocalTime)
       if (timeDiff > 0.1) {
-        console.log('[ClipForge] Syncing playhead to:', freshClipLocalTime, 'for clip:', currentClip.id, 'trim:', currentClip.trimStart, '-', currentClip.trimEnd)
-        player.currentTime = freshClipLocalTime
+        console.log('[ClipForge] Syncing playhead to:', clipLocalTime, 'for clip:', currentClip.id, 'trim:', currentClip.trimStart, '-', currentClip.trimEnd)
+        player.currentTime = clipLocalTime
       }
-    }
-
-    // If we're loading a new source, ALWAYS wait for metadata - don't trust readyState
-    if (isLoadingNewSource.current) {
-      console.log('[ClipForge] Waiting for new source metadata before syncing...')
-      const handleLoadedMetadata = () => {
-        console.log('[ClipForge] New source metadata loaded, syncing to current playhead position')
-        isLoadingNewSource.current = false
-        syncTime()
-      }
-      videoRef.current?.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true })
-
-      return () => {
-        videoRef.current?.removeEventListener('loadedmetadata', handleLoadedMetadata)
-      }
-    } else if (videoRef.current && videoRef.current.readyState >= 2) {
-      // Video is already loaded and this is just a playhead move, sync immediately
-      syncTime()
     }
 
     // Sync play/pause state with guard against race conditions
@@ -229,7 +241,7 @@ export function Preview() {
         setTimeout(() => { isUpdatingPlayState.current = false }, 100)
       }
     }
-  }, [playhead, isPlaying, currentClip?.id, currentClip?.trimStart, currentClip?.trimEnd, setIsPlaying])
+  }, [playhead, isPlaying, currentClip?.id, currentClip?.trimStart, currentClip?.trimEnd, setIsPlaying, isLoadingNewSource])
 
   // Handle drop from media library
   const handleDrop = (e: React.DragEvent) => {
