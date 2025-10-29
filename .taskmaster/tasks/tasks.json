@@ -2,7 +2,7 @@
   "master": {
     "tasks": [
       {
-        "id": "1",
+        "id": 1,
         "title": "Scaffold Tauri Project",
         "description": "Create a new Tauri project with React frontend for ClipForge.",
         "status": "done",
@@ -73,7 +73,7 @@
         "updatedAt": "2025-10-27T23:56:06.290Z"
       },
       {
-        "id": "2",
+        "id": 2,
         "title": "Download and Place FFmpeg Binaries",
         "description": "Acquire static FFmpeg binaries for macOS and Windows and place them in the project.",
         "details": "Download FFmpeg static binaries from https://ffmpeg.org/download.html for macOS (aarch64-apple-darwin) and Windows (x86_64-pc-windows-msvc). Place them in `src-tauri/binaries/` with names like `ffmpeg-aarch64-apple-darwin` and `ffmpeg-x86_64-pc-windows-msvc.exe`. Ensure the binaries are executable and match the platform architectures.",
@@ -151,7 +151,7 @@
         "updatedAt": "2025-10-28T01:18:44.331Z"
       },
       {
-        "id": "3",
+        "id": 3,
         "title": "Configure tauri.conf.json",
         "description": "Set up the Tauri configuration file with necessary permissions and settings.",
         "details": "Update `tauri.conf.json` to include allowlist for fs, dialog, and shell with sidecar enabled. Set security CSP to allow blob, data, filesystem. Add macOS entitlements for camera access. Configure build to include external binaries like `binaries/ffmpeg-$ARCH-$OS`. Set product name to 'ClipForge'.",
@@ -224,7 +224,7 @@
         "updatedAt": "2025-10-28T00:00:17.397Z"
       },
       {
-        "id": "4",
+        "id": 4,
         "title": "Add Dependencies to Cargo.toml",
         "description": "Include required Rust crates in the Cargo.toml file.",
         "details": "Add the specified dependencies: tauri 1.7 with api-all features, tauri-plugin-shell 1.7, nokhwa 0.10.4 with input features, serde 1.0 with derive, serde_json 1.0, tokio 1.38 with rt and process features. Ensure versions match the PRD.",
@@ -297,7 +297,7 @@
         "updatedAt": "2025-10-28T00:00:18.834Z"
       },
       {
-        "id": "5",
+        "id": 5,
         "title": "Implement check_ffmpeg Command",
         "description": "Create an async Tauri command to verify FFmpeg availability.",
         "details": "Implement the check_ffmpeg function as provided in the PRD, using tauri::plugin::shell::Command to run 'ffmpeg -version' as a sidecar. Return version string on success or error message on failure.",
@@ -372,7 +372,7 @@
         "updatedAt": "2025-10-28T00:01:17.665Z"
       },
       {
-        "id": "6",
+        "id": 6,
         "title": "Implement import_file Command",
         "description": "Create an async Tauri command to import MP4/MOV files and extract metadata.",
         "details": "Implement the import_file function as per PRD, using ffprobe to extract duration, resolution, then copy the file to clips/ directory. Handle errors for invalid files or paths.",
@@ -450,7 +450,7 @@
         "updatedAt": "2025-10-28T01:08:31.520Z"
       },
       {
-        "id": "7",
+        "id": 7,
         "title": "Implement trim_clip Command",
         "description": "Create an async Tauri command to trim video clips using FFmpeg.",
         "details": "Implement the trim_clip function using FFmpeg sidecar with -c copy for fast trimming. Take input path, output path, start and end times in seconds.",
@@ -530,7 +530,7 @@
         "updatedAt": "2025-10-28T01:14:42.219Z"
       },
       {
-        "id": "8",
+        "id": 8,
         "title": "Implement export_video Command",
         "description": "Create an async Tauri command for exporting single or multiple clips to MP4.",
         "details": "Implement the export_video function using FFmpeg concat demuxer for multi-clip support, with resolution options (720p, 1080p). Parse progress from stderr for updates. Initially support single clip, extend to multi as per final submission.",
@@ -610,7 +610,7 @@
         "updatedAt": "2025-10-28T02:21:43.989Z"
       },
       {
-        "id": "9",
+        "id": 9,
         "title": "Implement record_webcam_clip Command",
         "description": "Create an async Tauri command to capture webcam video using nokhwa.",
         "details": "Implement the record_webcam_clip function using nokhwa to capture at 1280x720, 30fps, MJPG, for specified duration, piping frames to FFmpeg for MP4 output.",
@@ -689,7 +689,7 @@
         "updatedAt": "2025-10-28T02:23:52.963Z"
       },
       {
-        "id": "10",
+        "id": 10,
         "title": "Implement save_recording Command",
         "description": "Create an async Tauri command to save screen recording blobs to disk.",
         "details": "Implement the save_recording function to write Vec<u8> data to a specified path in clips/. Optionally convert WebM to MP4 if needed.",
@@ -767,7 +767,7 @@
         "updatedAt": "2025-10-28T02:04:34.589Z"
       },
       {
-        "id": "11",
+        "id": 11,
         "title": "Update main.rs and Register Commands",
         "description": "Set up the main function to register all Tauri commands and plugins.",
         "details": "In main.rs, use tauri::Builder to add tauri-plugin-shell plugin and invoke_handler with generate_handler for all commands: check_ffmpeg, import_file, trim_clip, export_video, record_webcam_clip, save_recording.",
@@ -850,7 +850,7 @@
         "updatedAt": "2025-10-28T02:25:12.986Z"
       },
       {
-        "id": "12",
+        "id": 12,
         "title": "Build and Package the Application",
         "description": "Compile the app and create native packages for macOS and Windows.",
         "details": "Run `cargo tauri build` to generate .dmg for macOS and .exe for Windows, ensuring FFmpeg binaries are bundled and bundle size is under 200MB. Verify launch time under 5 seconds.",
@@ -936,6 +936,209 @@
       "completedCount": 12,
       "tags": [
         "master"
+      ],
+      "created": "2025-10-28T22:42:00.783Z",
+      "description": "Tasks for master context"
+    }
+  },
+  "mvp": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Download FFmpeg Binaries",
+        "description": "Download FFmpeg binaries for Mac and Windows platforms to enable video processing functionality.",
+        "details": "Navigate to clipforge/src-tauri/binaries and execute ./download.sh to fetch the required FFmpeg binaries. Ensure the binaries are compatible with the target platforms and verify their integrity after download. Update tauri.conf.json to reference the correct externalBin paths if necessary.",
+        "testStrategy": "Verify that the binaries are present in the binaries directory and that FFmpeg commands (e.g., check_ffmpeg) execute successfully in the Tauri backend.",
+        "priority": "high",
+        "dependencies": [],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 2,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "",
+        "updatedAt": "2025-10-28T22:41:40.143Z"
+      },
+      {
+        "id": "2",
+        "title": "Verify Development Environment Build",
+        "description": "Ensure the app builds successfully in development mode on the target platforms.",
+        "details": "Run pnpm tauri dev to confirm the frontend (React + TypeScript) and backend (Rust) integrate properly. Check that all dependencies are installed, including Tauri CLI and Node.js/npm. Resolve any build errors related to the current stack.",
+        "testStrategy": "Launch the app in dev mode and confirm it starts without errors. Test basic UI rendering and state management with Zustand.",
+        "priority": "high",
+        "dependencies": [
+          "1"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 3,
+        "recommendedSubtasks": 0,
+        "expansionPrompt": "",
+        "updatedAt": "2025-10-28T22:41:42.478Z"
+      },
+      {
+        "id": "3",
+        "title": "Implement Video Import Functionality",
+        "description": "Enable users to import MP4/MOV video files into the app.",
+        "details": "Use Tauri file picker to select video files. Implement the import_file Tauri command to process the file and add it to the timeline. Integrate with Fabric.js canvas for visual representation. Handle file validation and error cases.",
+        "testStrategy": "Import multiple video files (MP4/MOV) and verify they appear on the timeline. Check for error messages on invalid files.",
+        "priority": "high",
+        "dependencies": [
+          "2"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 6,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break down video import into subtasks for file picker integration, Tauri command implementation, and canvas visualization.",
+        "updatedAt": "2025-10-28T22:41:44.519Z"
+      },
+      {
+        "id": "4",
+        "title": "Develop Timeline Display",
+        "description": "Create a visual timeline for displaying imported video clips.",
+        "details": "Use Fabric.js to render the timeline canvas. Display clips as visual elements with in/out points. Ensure the timeline is responsive and updates with state changes via Zustand.",
+        "testStrategy": "Import clips and confirm they are visually represented on the timeline. Test resizing and scrolling of the timeline.",
+        "priority": "high",
+        "dependencies": [
+          "3"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 1,
+        "expansionPrompt": "Subdivide timeline development into canvas rendering and state synchronization subtasks.",
+        "updatedAt": "2025-10-28T22:41:46.543Z"
+      },
+      {
+        "id": "5",
+        "title": "Integrate Preview Player",
+        "description": "Add a video player for previewing clips in the timeline.",
+        "details": "Integrate Plyr player to play selected clips. Sync playback with timeline interactions. Ensure smooth playback and handle multiple clips.",
+        "testStrategy": "Play imported clips in the preview player. Verify synchronization with timeline scrubbing and no stuttering.",
+        "priority": "high",
+        "dependencies": [
+          "4"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 6,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Split preview player integration into Plyr setup and timeline synchronization subtasks.",
+        "updatedAt": "2025-10-28T22:41:48.755Z"
+      },
+      {
+        "id": "6",
+        "title": "Implement Basic Trim Functionality",
+        "description": "Allow users to set in/out points for trimming single clips.",
+        "details": "Add UI controls on the timeline for setting trim points. Implement trim_clip Tauri command using FFmpeg. Update the timeline and preview accordingly.",
+        "testStrategy": "Set in/out points on a clip, trim it, and verify the preview reflects the changes. Export the trimmed clip and check the output.",
+        "priority": "high",
+        "dependencies": [
+          "5"
+        ],
+        "status": "done",
+        "subtasks": [],
+        "complexity": 7,
+        "recommendedSubtasks": 3,
+        "expansionPrompt": "Divide trim functionality into UI controls, FFmpeg command, and timeline/preview updates subtasks.",
+        "updatedAt": "2025-10-28T22:41:51.140Z"
+      },
+      {
+        "id": "7",
+        "title": "Add Export to MP4 Feature",
+        "description": "Enable exporting edited clips to MP4 format.",
+        "status": "done",
+        "dependencies": [
+          "6"
+        ],
+        "priority": "high",
+        "details": "Backend export_video Tauri command is fully implemented and tested (lib.rs:438-531). Frontend export-button.tsx component exists but needs to be wired up to invoke the backend command. Currently the export button is present in the UI but not connected to the Tauri command. Need to add invoke('export_video') call with proper clip paths and handle progress/errors.",
+        "testStrategy": "Trim a clip and export it to MP4. Verify the output file plays correctly and matches the trimmed duration.",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Implement export_video Tauri command",
+            "description": "Implement the export_video Tauri command using FFmpeg to export edited clips to MP4 format.",
+            "dependencies": [],
+            "details": "Use FFmpeg to process the clip with specified paths, handle single clip export initially, and ensure proper error handling.",
+            "status": "done",
+            "testStrategy": "Test the command by exporting a trimmed clip and verifying the output file.",
+            "parentId": "undefined"
+          },
+          {
+            "id": 2,
+            "title": "Wire up export button in UI",
+            "description": "Connect the existing export-button.tsx component to invoke the export_video Tauri command.",
+            "dependencies": [
+              1
+            ],
+            "details": "Add invoke('export_video') call with proper clip paths, implement progress indication, and handle errors in the UI.",
+            "status": "pending",
+            "testStrategy": "Click the export button, verify the command is invoked, progress is shown, and the exported file is generated correctly.",
+            "parentId": "undefined"
+          }
+        ],
+        "complexity": 6,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Break export feature into Tauri command implementation and UI progress indication subtasks.",
+        "updatedAt": "2025-10-28T23:14:49.256Z"
+      },
+      {
+        "id": "8",
+        "title": "Polish UI/UX Elements",
+        "description": "Improve usability with loading states, error messages, and responsive design.",
+        "details": "Add loading spinners to ImportButton and ExportButton. Enhance error display in Alert components. Ensure consistent Tailwind CSS styling, keyboard navigation, tooltips, and responsive layout. Add basic help text.",
+        "testStrategy": "Test import/export workflows for loading states and error handling. Resize the app window and verify UI doesn't break. Check keyboard accessibility.",
+        "priority": "medium",
+        "dependencies": [
+          "7"
+        ],
+        "status": "pending",
+        "subtasks": [],
+        "complexity": 4,
+        "recommendedSubtasks": 1,
+        "expansionPrompt": "Subtask for enhancing UI components like loading states, error handling, and responsiveness."
+      },
+      {
+        "id": "9",
+        "title": "Perform Packaging Build",
+        "description": "Build and package the app for Mac and Windows distribution.",
+        "details": "Run pnpm tauri build on Mac and Windows. Ensure FFmpeg binaries are bundled. Verify app icon, launch time (<5s), and bundle size (<200MB). Generate .dmg or .exe files.",
+        "testStrategy": "Install and launch the packaged app on a clean system (VM). Confirm all features work in packaged mode, not just dev mode.",
+        "priority": "high",
+        "dependencies": [
+          "8"
+        ],
+        "status": "pending",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 1,
+        "expansionPrompt": "Separate packaging into platform-specific builds and bundle verification subtasks."
+      },
+      {
+        "id": "10",
+        "title": "Conduct Final Testing and Validation",
+        "description": "Run comprehensive tests for performance, stability, and MVP requirements.",
+        "details": "Perform end-to-end testing of the full workflow: import → timeline → preview → trim → export. Test with 5+ clips for responsiveness. Monitor memory usage, check for crashes during a 10-minute session, and verify FFmpeg process cleanup.",
+        "testStrategy": "Use various video formats/sizes. Confirm no crashes, smooth playback, and successful exports. Validate on packaged app.",
+        "priority": "high",
+        "dependencies": [
+          "9"
+        ],
+        "status": "pending",
+        "subtasks": [],
+        "complexity": 5,
+        "recommendedSubtasks": 2,
+        "expansionPrompt": "Divide testing into end-to-end workflow validation and performance monitoring subtasks."
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2025-10-28T23:14:49.256Z",
+      "taskCount": 10,
+      "completedCount": 7,
+      "tags": [
+        "mvp"
       ]
     }
   }

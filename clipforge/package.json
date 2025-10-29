@@ -12,7 +12,11 @@
     "use-elm": "cp src-tauri/tauri.conf.elm.json src-tauri/tauri.conf.json && echo 'Switched to Elm frontend (port 5173)'",
     "dev:elm": "cd src-tauri/frontend && pnpm run dev",
     "tauri:elm": "pnpm run use-elm && pnpm run tauri dev",
-    "tauri:react": "pnpm run use-react && pnpm run tauri dev"
+    "tauri:react": "pnpm run use-react && pnpm run tauri dev",
+    "build:mac": "tauri build --target aarch64-apple-darwin",
+    "build:mac-universal": "tauri build --target universal-apple-darwin",
+    "build:win": "tauri build --target x86_64-pc-windows-msvc",
+    "build:all": "pnpm run build:mac && pnpm run build:win"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.0",

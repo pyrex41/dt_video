@@ -1,0 +1,117 @@
+name: Build and Release ClipForge
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./clipforge/src-tauri -> target"
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        working-directory: ./clipforge
+        run: pnpm install
+
+      - name: Download FFmpeg binaries
+        working-directory: ./clipforge/src-tauri/binaries
+        run: ./download.sh
+
+      - name: Build for macOS ARM64
+        working-directory: ./clipforge
+        run: pnpm run build:mac
+
+      - name: Build for macOS Intel
+        working-directory: ./clipforge
+        run: pnpm run build:mac-universal
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipforge-macos
+          path: |
+            clipforge/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            clipforge/src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./clipforge/src-tauri -> target"
+
+      - name: Install pnpm
+        run: npm install -g pnpm
+
+      - name: Install dependencies
+        working-directory: ./clipforge
+        run: pnpm install
+
+      - name: Download FFmpeg binaries
+        working-directory: ./clipforge/src-tauri/binaries
+        run: ./download.sh
+
+      - name: Build for Windows
+        working-directory: ./clipforge
+        run: pnpm run build:win
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipforge-windows
+          path: |
+            clipforge/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+
+  release:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            clipforge-macos/*.dmg
+            clipforge-windows/*.msi
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

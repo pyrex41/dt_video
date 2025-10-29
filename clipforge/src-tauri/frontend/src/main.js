@@ -115,19 +115,49 @@ app.ports.pauseVideo.subscribe(() => {
 
 // Handle trim clip command from Elm
 app.ports.trimClip.subscribe(async (trimData) => {
-  console.log('Trim clip requested:', trimData)
+  console.log('[ClipForge] Trim clip requested:', trimData)
 
   // TAURI INTEGRATION - ACTIVE:
   try {
-    await invoke('trim_clip', {
-      input: trimData.input,
-      output: trimData.output,
-      start: trimData.start,
-      end: trimData.end
+    // Call backend with correct parameter names (matching Rust signature)
+    const outputPath = await invoke('trim_clip', {
+      inputPath: trimData.inputPath,
+      outputPath: trimData.outputPath,
+      startTime: trimData.startTime,
+      endTime: trimData.endTime
     })
-    alert(`Trim complete!\nOutput: ${trimData.output}`)
+
+    console.log('[ClipForge] Trim complete, output:', outputPath)
+
+    // Get metadata for the trimmed clip using ffprobe
+    const metadata = await invoke('import_file', {
+      path: outputPath,
+      dest: outputPath
+    })
+
+    console.log('[ClipForge] Trimmed clip metadata:', metadata)
+
+    // Use the file_path from metadata (which is in app data directory)
+    const finalPath = metadata.file_path || outputPath
+
+    // Convert file path to Tauri asset URL
+    const assetUrl = convertFileSrc(finalPath)
+
+    // Create trimmed clip data to send back to Elm
+    const trimmedClip = {
+      id: trimData.clipId,
+      path: assetUrl,
+      fileName: finalPath.split('/').pop() || finalPath.split('\\').pop(),
+      duration: metadata.duration,
+      width: metadata.width,
+      height: metadata.height
+    }
+
+    // Send trimmed clip data back to Elm
+    app.ports.trimComplete.send(trimmedClip)
+    console.log('[ClipForge] Trim complete, updated clip sent to Elm')
   } catch (error) {
-    console.error('Trim failed:', error)
+    console.error('[ClipForge] Trim failed:', error)
     alert(`Trim failed: ${error}`)
   }
 })

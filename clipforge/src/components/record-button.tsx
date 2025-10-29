@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { invoke } from "@tauri-apps/api/tauri"
 import { Button } from "./ui/button"
-import { Video, Monitor } from "lucide-react"
+import { Video, Monitor, Circle, Mic, MicOff } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import type { Clip } from "../types/clip"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
@@ -12,6 +12,7 @@ export function RecordButton() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingType, setRecordingType] = useState<"webcam" | "screen" | null>(null)
   const [activeRecorder, setActiveRecorder] = useState<{ recorder: MediaRecorder; stream: MediaStream } | null>(null)
+  const [startTime, setStartTime] = useState<number>(0)
   const { addClip, setError, clips } = useClipStore()
 
   const stopRecording = () => {
@@ -23,6 +24,16 @@ export function RecordButton() {
     }
   }
 
+  const toggleAudio = () => {
+    if (activeRecorder && activeRecorder.stream) {
+      const audioTrack = activeRecorder.stream.getAudioTracks()[0]
+      if (audioTrack) {
+        audioTrack.enabled = !audioTrack.enabled
+        console.log("[ClipForge] Audio", audioTrack.enabled ? "enabled" : "muted")
+      }
+    }
+  }
+
   const handleWebcamRecord = async () => {
     try {
       console.log("[ClipForge] Starting webcam recording...")
@@ -31,13 +42,21 @@ export function RecordButton() {
       setError(null)
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
       })
       console.log("[ClipForge] Got media stream:", stream.getTracks().map(t => `${t.kind}: ${t.label}`))
 
       const recorder = new MediaRecorder(stream, {
-        mimeType: "video/webm;codecs=vp8",
+        mimeType: "video/webm;codecs=vp8,opus",
       })
 
       const chunks: Blob[] = []
@@ -67,7 +86,7 @@ export function RecordButton() {
           })
           console.log("[ClipForge] Recording saved to:", outputPath)
 
-          const duration = 10 // Approximate duration
+          const duration = (Date.now() - startTime) / 1000
 
           const newClip: Clip = {
             id: `clip_${Date.now()}`,
@@ -98,14 +117,10 @@ export function RecordButton() {
 
       // Store recorder reference for manual stop
       setActiveRecorder({ recorder, stream })
+      setStartTime(Date.now())
 
       recorder.start()
-      console.log("[ClipForge] Recorder started, will record for 10 seconds...")
-      setTimeout(() => {
-        console.log("[ClipForge] Stopping recorder...")
-        recorder.stop()
-        stream.getTracks().forEach((track) => track.stop())
-      }, 10000) // 10 seconds
+      console.log("[ClipForge] Recorder started - recording indefinitely until manual stop")
     } catch (err) {
       setError(`Failed to record webcam: ${err}`)
       console.error("[ClipForge] Webcam recording error:", err)
@@ -123,13 +138,22 @@ export function RecordButton() {
       setError(null)
 
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { mediaSource: "screen" } as MediaTrackConstraints,
-        audio: true,
+        video: {
+          mediaSource: "screen",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 }
+        } as MediaTrackConstraints,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
       })
       console.log("[ClipForge] Got display stream:", stream.getTracks().map(t => `${t.kind}: ${t.label}`))
 
       const recorder = new MediaRecorder(stream, {
-        mimeType: "video/webm;codecs=vp8",
+        mimeType: "video/webm;codecs=vp8,opus",
       })
 
       const chunks: Blob[] = []
@@ -159,7 +183,7 @@ export function RecordButton() {
           })
           console.log("[ClipForge] Recording saved to:", outputPath)
 
-          const duration = 10 // Approximate duration
+          const duration = (Date.now() - startTime) / 1000
 
           const newClip: Clip = {
             id: `clip_${Date.now()}`,
@@ -190,14 +214,10 @@ export function RecordButton() {
 
       // Store recorder reference for manual stop
       setActiveRecorder({ recorder, stream })
+      setStartTime(Date.now())
 
       recorder.start()
-      console.log("[ClipForge] Recorder started, will record for 10 seconds...")
-      setTimeout(() => {
-        console.log("[ClipForge] Stopping recorder...")
-        recorder.stop()
-        stream.getTracks().forEach((track) => track.stop())
-      }, 10000) // 10 seconds
+      console.log("[ClipForge] Recorder started - recording indefinitely until manual stop")
     } catch (err) {
       setError(`Failed to record screen: ${err}`)
       console.error("[ClipForge] Screen recording error:", err)
@@ -208,32 +228,80 @@ export function RecordButton() {
   }
 
   if (isRecording) {
+    const audioTrack = activeRecorder?.stream.getAudioTracks()[0]
+    const isMuted = audioTrack ? !audioTrack.enabled : false
+
     return (
-      <Button variant="destructive" size="sm" onClick={stopRecording}>
-        <Video className="mr-2 h-4 w-4" />
-        Stop {recordingType === "webcam" ? "Webcam" : "Screen"} Recording
-      </Button>
+      <div className="flex items-center gap-3">
+        <div className="relative group">
+          <Button
+            variant="destructive"
+            size="icon"
+            className="h-12 w-12 bg-red-600 hover:bg-red-500 text-white border-2 border-red-500 shadow-lg animate-pulse"
+            onClick={stopRecording}
+          >
+            <Circle className="h-6 w-6" />
+          </Button>
+          <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-red-900 text-white text-xs px-3 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-10 shadow-lg">
+            Stop Recording
+          </div>
+        </div>
+
+        <div className="relative group">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`h-12 w-12 text-white border-2 border-zinc-500 shadow-lg transition-all duration-200 ${
+              isMuted ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-green-600 hover:bg-green-500 border-green-500'
+            }`}
+            onClick={toggleAudio}
+          >
+            {isMuted ? <MicOff className="h-6 w-6" /> : <Mic className="h-6 w-6" />}
+          </Button>
+          <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-zinc-800 text-white text-xs px-3 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-10 shadow-lg">
+            {isMuted ? 'Unmute' : 'Mute'} Audio
+          </div>
+        </div>
+
+        <div className="text-sm text-zinc-300 font-mono bg-zinc-800 px-4 py-2 rounded-md border border-zinc-600 shadow-md">
+          {recordingType === "webcam" ? "Webcam" : "Screen"} • {Math.round((Date.now() - startTime) / 1000)}s
+        </div>
+      </div>
     )
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Video className="mr-2 h-4 w-4" />
-          Record
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent>
-        <DropdownMenuItem onClick={handleWebcamRecord}>
-          <Video className="mr-2 h-4 w-4" />
-          Webcam
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={handleScreenRecord}>
-          <Monitor className="mr-2 h-4 w-4" />
-          Screen
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <div className="relative group">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-12 w-12 hover:bg-green-600 text-white border-2 border-green-500 hover:border-green-400 transition-all duration-200 shadow-lg"
+          >
+            <Video className="h-6 w-6" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-48 bg-zinc-800 border-zinc-700 p-2 rounded-lg shadow-xl">
+          <DropdownMenuItem
+            onClick={handleWebcamRecord}
+            className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+          >
+            <Video className="h-5 w-5 text-green-400" />
+            <span className="text-sm">Webcam</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={handleScreenRecord}
+            className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+          >
+            <Monitor className="h-5 w-5 text-blue-400" />
+            <span className="text-sm">Screen</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 bg-zinc-800 text-white text-xs px-3 py-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none z-10 shadow-lg">
+        Record Video
+      </div>
+    </div>
   )
 }

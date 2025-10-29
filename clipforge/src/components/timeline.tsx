@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 import { Canvas, Rect, Line, Text } from "fabric"
 import { useClipStore } from "../store/use-clip-store"
 
@@ -12,7 +12,9 @@ const RULER_HEIGHT = 40
 export function Timeline() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fabricCanvasRef = useRef<Canvas | null>(null)
-  const { clips, playhead, setPlayhead, zoom, selectedClipId, setSelectedClip, updateClip } = useClipStore()
+  const isDraggingRef = useRef(false)
+  const [forceRender, setForceRender] = useState(0)
+  const { clips, playhead, setPlayhead, zoom, selectedClipId, setSelectedClip, updateClip, trimClip, deleteClip, autoFitZoom } = useClipStore()
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -42,10 +44,26 @@ export function Timeline() {
     }
   }, [])
 
+  // Auto-fit zoom when clips change
+  useEffect(() => {
+    const canvas = fabricCanvasRef.current
+    if (!canvas || clips.length === 0) return
+
+    // Auto-fit zoom on initial load or when all clips change
+    const timelineWidth = canvas.width || 800
+    autoFitZoom(timelineWidth)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clips.length, JSON.stringify(clips.map(c => ({ id: c.id, duration: c.duration })))])
+
   // Render timeline elements
   useEffect(() => {
     const canvas = fabricCanvasRef.current
     if (!canvas) return
+
+    // Don't re-render while dragging
+    if (isDraggingRef.current) {
+      return
+    }
 
     canvas.clear()
     canvas.backgroundColor = "#18181b" // zinc-900
@@ -62,10 +80,11 @@ export function Timeline() {
     })
     canvas.add(track)
 
-    // Draw time ruler
+    // Draw time ruler - scale to longest clip
     const canvasWidth = canvas.width || 800
-    const secondsVisible = canvasWidth / zoom
-    const markerInterval = secondsVisible > 60 ? 10 : secondsVisible > 30 ? 5 : 1
+    const maxDuration = clips.length > 0 ? Math.max(...clips.map(c => c.end)) : 60
+    const secondsVisible = Math.max(maxDuration * 1.2, 60) // Add 20% padding
+    const markerInterval = secondsVisible > 120 ? 10 : secondsVisible > 60 ? 5 : 1
 
     for (let i = 0; i <= secondsVisible; i += markerInterval) {
       const x = i * zoom
@@ -94,17 +113,39 @@ export function Timeline() {
     // Draw clips
     clips.forEach((clip) => {
       const x = clip.start * zoom
-      const width = (clip.end - clip.start) * zoom
+      const fullWidth = (clip.end - clip.start) * zoom
+
+      // Calculate trim handle positions within the clip
+      const trimStartOffset = clip.trimStart * zoom
+      const trimEndOffset = clip.trimEnd * zoom
+      const trimmedWidth = trimEndOffset - trimStartOffset
+
       const isSelected = clip.id === selectedClipId
 
-      // Clip rectangle
+      // Full clip rectangle (dimmed to show untrimmed portions)
       const clipRect = new Rect({
         left: x,
         top: RULER_HEIGHT + TRACK_PADDING + 10,
-        width: width,
+        width: fullWidth,
         height: TRACK_HEIGHT - 20,
-        fill: isSelected ? "#3b82f6" : "#6366f1", // blue-500 : indigo-500
-        stroke: isSelected ? "#60a5fa" : "#818cf8", // blue-400 : indigo-400
+        fill: isSelected ? "#1e3a8a" : "#312e81", // darker blue for full clip
+        stroke: isSelected ? "#60a5fa" : "#818cf8",
+        strokeWidth: 1,
+        rx: 4,
+        ry: 4,
+        opacity: 0.4,
+        selectable: false,
+        evented: false,
+      })
+
+      // Trimmed portion (brighter)
+      const trimmedRect = new Rect({
+        left: x + trimStartOffset,
+        top: RULER_HEIGHT + TRACK_PADDING + 10,
+        width: trimmedWidth,
+        height: TRACK_HEIGHT - 20,
+        fill: isSelected ? "#3b82f6" : "#6366f1",
+        stroke: isSelected ? "#60a5fa" : "#818cf8",
         strokeWidth: 2,
         rx: 4,
         ry: 4,
@@ -113,7 +154,7 @@ export function Timeline() {
 
       // Clip name text
       const clipText = new Text(clip.name, {
-        left: x + 8,
+        left: x + trimStartOffset + 8,
         top: RULER_HEIGHT + TRACK_PADDING + 18,
         fontSize: 13,
         fill: "#ffffff",
@@ -121,33 +162,45 @@ export function Timeline() {
         evented: false,
       })
 
-      // Trim handles
+      // Trim handles - positioned at trim points
       const leftHandle = new Rect({
-        left: x,
+        left: x + trimStartOffset,
         top: RULER_HEIGHT + TRACK_PADDING + 10,
-        width: 8,
+        width: 12,
         height: TRACK_HEIGHT - 20,
-        fill: "#10b981", // green-500
-        rx: 2,
-        ry: 2,
+        fill: "#ffffff",
+        stroke: "#3b82f6",
+        strokeWidth: 2,
+        rx: 3,
+        ry: 3,
+        opacity: 0.9,
+        hoverCursor: "ew-resize",
+        selectable: true,
+        evented: true,
       })
 
       const rightHandle = new Rect({
-        left: x + width - 8,
+        left: x + trimEndOffset - 12,
         top: RULER_HEIGHT + TRACK_PADDING + 10,
-        width: 8,
+        width: 12,
         height: TRACK_HEIGHT - 20,
-        fill: "#10b981", // green-500
-        rx: 2,
-        ry: 2,
+        fill: "#ffffff",
+        stroke: "#3b82f6",
+        strokeWidth: 2,
+        rx: 3,
+        ry: 3,
+        opacity: 0.9,
+        hoverCursor: "ew-resize",
+        selectable: true,
+        evented: true,
       })
 
-      // Make clip draggable
-      clipRect.on("moving", (e) => {
+      // Make trimmed clip draggable (move clip position in timeline)
+      trimmedRect.on("moving", (e) => {
         const target = e.target
         if (!target) return
 
-        const newStart = (target.left || 0) / zoom
+        const newStart = ((target.left || 0) - trimStartOffset) / zoom
         const duration = clip.end - clip.start
         updateClip(clip.id, {
           start: Math.max(0, newStart),
@@ -155,37 +208,95 @@ export function Timeline() {
         })
       })
 
-      clipRect.on("mousedown", () => {
+      trimmedRect.on("mousedown", () => {
         setSelectedClip(clip.id)
-        setPlayhead(clip.start) // Move playhead to clip start
+        setPlayhead(clip.start + clip.trimStart) // Move playhead to trim start
       })
 
       // Make handles draggable for trimming
+      // Store initial positions for constraining movement
+      let initialLeftHandlePos = x + trimStartOffset
+      let initialRightHandlePos = x + trimEndOffset - 12
+
+      leftHandle.on("mousedown", () => {
+        isDraggingRef.current = true
+        initialLeftHandlePos = x + trimStartOffset
+        setSelectedClip(clip.id)
+      })
+
       leftHandle.on("moving", (e) => {
         const target = e.target
         if (!target) return
 
-        const newStart = Math.max(0, (target.left || 0) / zoom)
-        if (newStart < clip.end - 0.1) {
-          updateClip(clip.id, { start: newStart })
+        // Constrain movement to stay within clip bounds
+        const minX = x
+        const maxX = x + trimEndOffset - 12 - (0.1 * zoom) // Leave at least 0.1s before trim end
+
+        if ((target.left || 0) < minX) {
+          target.left = minX
+        } else if ((target.left || 0) > maxX) {
+          target.left = maxX
         }
+      })
+
+      leftHandle.on("mouseup", (e) => {
+        const target = e.target
+        if (target) {
+          // Update trim position in store
+          const newTrimStart = Math.max(0, Math.min(clip.trimEnd - 0.1, ((target.left || 0) - x) / zoom))
+          console.log('[ClipForge] Left handle released:', { newTrimStart, targetLeft: target.left, x, zoom })
+          updateClip(clip.id, { trimStart: newTrimStart })
+          // Move playhead to new trim start to update preview
+          setPlayhead(clip.start + newTrimStart)
+        }
+        isDraggingRef.current = false
+        // Force re-render to update button state
+        setForceRender(prev => prev + 1)
+      })
+
+      rightHandle.on("mousedown", () => {
+        isDraggingRef.current = true
+        initialRightHandlePos = x + trimEndOffset - 12
+        setSelectedClip(clip.id)
       })
 
       rightHandle.on("moving", (e) => {
         const target = e.target
         if (!target) return
 
-        const newEnd = ((target.left || 0) + 8) / zoom
-        if (newEnd > clip.start + 0.1) {
-          updateClip(clip.id, { end: newEnd })
+        // Constrain movement to stay within clip bounds
+        const minX = x + trimStartOffset + (0.1 * zoom) // Leave at least 0.1s after trim start
+        const maxX = x + (clip.duration * zoom) - 12
+
+        if ((target.left || 0) < minX) {
+          target.left = minX
+        } else if ((target.left || 0) > maxX) {
+          target.left = maxX
         }
       })
 
-      clipRect.set({ lockMovementY: true })
-      leftHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true })
-      rightHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true })
+      rightHandle.on("mouseup", (e) => {
+        const target = e.target
+        if (target) {
+          // Update trim position in store
+          const newTrimEnd = Math.max(clip.trimStart + 0.1, Math.min(clip.duration, ((target.left || 0) + 12 - x) / zoom))
+          console.log('[ClipForge] Right handle released:', { newTrimEnd, targetLeft: target.left, x, zoom })
+          updateClip(clip.id, { trimEnd: newTrimEnd })
+          // Move playhead to new trim end to update preview
+          setPlayhead(clip.start + newTrimEnd)
+        }
+        isDraggingRef.current = false
+        // Force re-render to update button state
+        setForceRender(prev => prev + 1)
+      })
 
-      canvas.add(clipRect, clipText, leftHandle, rightHandle)
+      trimmedRect.set({ lockMovementY: true, hoverCursor: "move" })
+      leftHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true, hasControls: false })
+      rightHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true, hasControls: false })
+
+      // Add clip elements - handles MUST be added last so they're on top and can receive mouse events
+      canvas.add(clipRect, trimmedRect, clipText)
+      canvas.add(leftHandle, rightHandle)
     })
 
     // Draw playhead
@@ -229,7 +340,7 @@ export function Timeline() {
     })
 
     canvas.renderAll()
-  }, [clips, playhead, zoom, selectedClipId, setPlayhead, setSelectedClip, updateClip])
+  }, [clips, playhead, zoom, selectedClipId, setPlayhead, setSelectedClip, updateClip, trimClip, deleteClip, forceRender])
 
   return (
     <div className="relative border-t border-zinc-800 bg-zinc-900">

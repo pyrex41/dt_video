@@ -19,6 +19,33 @@ struct VideoMetadata {
     file_path: String,
 }
 
+#[derive(Serialize, Deserialize)]
+struct Clip {
+    id: String,
+    name: String,
+    path: String,
+    start: f64,
+    end: f64,
+    duration: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct WorkspaceState {
+    clips: Vec<Clip>,
+    playhead: f64,
+    is_playing: bool,
+    zoom: f64,
+    selected_clip_id: Option<String>,
+    export_progress: f64,
+}
+
+#[derive(Serialize, Deserialize)]
+struct ClipInfo {
+    name: String,
+    path: String,
+    size: u64,
+}
+
 #[tauri::command]
 async fn check_ffmpeg() -> Result<String, String> {
     let output = Command::new_sidecar("ffmpeg")
@@ -132,6 +159,13 @@ async fn trim_clip(
         return Err("Start time must be less than end time".to_string());
     }
 
+    // Create edited directory if it doesn't exist
+    let output = Path::new(&output_path);
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create output directory: {}", e))?;
+    }
+
     // Calculate duration for FFmpeg
     let duration = end_time - start_time;
 
@@ -234,23 +268,30 @@ async fn save_recording(
     }
 }
 
+#[derive(serde::Deserialize)]
+struct ClipExportInfo {
+    path: String,
+    trim_start: f64,
+    trim_end: f64,
+}
+
 #[tauri::command]
 async fn export_video(
-    clip_paths: Vec<String>,
+    clips: Vec<ClipExportInfo>,
     output_path: String,
     resolution: String, // "720p" or "1080p"
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Validate inputs
-    if clip_paths.is_empty() {
+    if clips.is_empty() {
         return Err("No clips provided for export".to_string());
     }
 
     // Validate all input files exist
-    for clip_path in &clip_paths {
-        let path = Path::new(clip_path);
+    for clip in &clips {
+        let path = Path::new(&clip.path);
         if !path.exists() {
-            return Err(format!("Clip not found: {}", clip_path));
+            return Err(format!("Clip not found: {}", clip.path));
         }
     }
 
@@ -261,28 +302,31 @@ async fn export_video(
         _ => return Err(format!("Unsupported resolution: {}. Use '720p' or '1080p'.", resolution)),
     };
 
-    // If single clip, simple re-encode with resolution
-    if clip_paths.len() == 1 {
-        return export_single_clip(&clip_paths[0], &output_path, width, height, &app_handle).await;
+    // If single clip, simple re-encode with resolution and trim
+    if clips.len() == 1 {
+        return export_single_clip(&clips[0], &output_path, width, height, &app_handle).await;
     }
 
-    // Multi-clip: use concat demuxer
-    export_multi_clips(&clip_paths, &output_path, width, height, &app_handle).await
+    // Multi-clip: use concat demuxer with trims
+    export_multi_clips(&clips, &output_path, width, height, &app_handle).await
 }
 
 // Helper function for single clip export
 async fn export_single_clip(
-    input_path: &str,
+    clip: &ClipExportInfo,
     output_path: &str,
     width: u32,
     height: u32,
     _app_handle: &tauri::AppHandle,
 ) -> Result<String, String> {
-    // Run FFmpeg with progress monitoring
+    // Run FFmpeg with progress monitoring and trim
+    let duration = clip.trim_end - clip.trim_start;
     let output = Command::new_sidecar("ffmpeg")
         .expect("failed to create ffmpeg command")
         .args(&[
-            "-i", input_path,
+            "-ss", &clip.trim_start.to_string(),
+            "-t", &duration.to_string(),
+            "-i", &clip.path,
             "-vf", &format!("scale={}:{}", width, height),
             "-c:v", "libx264",
             "-preset", "medium",
@@ -310,7 +354,7 @@ async fn export_single_clip(
 
 // Helper function for multi-clip export using concat demuxer
 async fn export_multi_clips(
-    clip_paths: &[String],
+    clips: &[ClipExportInfo],
     output_path: &str,
     width: u32,
     height: u32,
@@ -321,14 +365,48 @@ async fn export_multi_clips(
         .app_data_dir()
         .ok_or("Failed to get app data directory")?;
 
+    // For multi-clip with trims, we need to pre-process each clip first
+    // Then concatenate the trimmed versions
+    let mut trimmed_clip_paths = Vec::new();
+
+    for (i, clip) in clips.iter().enumerate() {
+        let temp_output = app_data_dir.join(format!("temp_clip_{}.mp4", i));
+        let duration = clip.trim_end - clip.trim_start;
+
+        // Trim and scale each clip individually
+        let output = Command::new_sidecar("ffmpeg")
+            .expect("failed to create ffmpeg command")
+            .args(&[
+                "-ss", &clip.trim_start.to_string(),
+                "-t", &duration.to_string(),
+                "-i", &clip.path,
+                "-vf", &format!("scale={}:{}", width, height),
+                "-c:v", "libx264",
+                "-preset", "medium",
+                "-crf", "23",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-y",
+                temp_output.to_str().ok_or("Invalid temp path")?
+            ])
+            .output()
+            .map_err(|e| format!("Failed to trim clip {}: {}", i, e))?;
+
+        if !output.status.success() {
+            return Err(format!("FFmpeg trim failed for clip {}: {}", i, output.stderr));
+        }
+
+        trimmed_clip_paths.push(temp_output);
+    }
+
     // Create concat list file
     let concat_list_path = app_data_dir.join("concat_list.txt");
     let mut concat_file = fs::File::create(&concat_list_path)
         .map_err(|e| format!("Failed to create concat list file: {}", e))?;
 
-    // Write concat demuxer format
-    for clip_path in clip_paths {
-        writeln!(concat_file, "file '{}'", clip_path)
+    // Write concat demuxer format with trimmed clips
+    for temp_path in &trimmed_clip_paths {
+        writeln!(concat_file, "file '{}'", temp_path.to_str().ok_or("Invalid path")?)
             .map_err(|e| format!("Failed to write to concat list: {}", e))?;
     }
 
@@ -337,27 +415,25 @@ async fn export_multi_clips(
         .map_err(|e| format!("Failed to flush concat list: {}", e))?;
     drop(concat_file); // Close file
 
-    // Run FFmpeg with concat demuxer
+    // Run FFmpeg with concat demuxer (no need to scale again, already done)
     let output = Command::new_sidecar("ffmpeg")
         .expect("failed to create ffmpeg command")
         .args(&[
             "-f", "concat",
             "-safe", "0",
             "-i", concat_list_path.to_str().ok_or("Invalid concat list path")?,
-            "-vf", &format!("scale={}:{}", width, height),
-            "-c:v", "libx264",
-            "-preset", "medium",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
+            "-c", "copy", // Stream copy since clips are already processed
             "-y",
             output_path
         ])
         .output()
         .map_err(|e| format!("Failed to run ffmpeg concat: {}", e))?;
 
-    // Clean up concat list file
+    // Clean up temp files
     let _ = fs::remove_file(&concat_list_path);
+    for temp_path in &trimmed_clip_paths {
+        let _ = fs::remove_file(temp_path);
+    }
 
     if !output.status.success() {
         return Err(format!("FFmpeg concat failed: {}", output.stderr));
@@ -484,6 +560,127 @@ async fn record_webcam_clip(
     Ok(output_path)
 }
 
+#[tauri::command]
+async fn save_workspace(state_json: String, app_handle: tauri::AppHandle) -> Result<(), String> {
+    let app_data_dir = app_handle.path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data directory")?;
+
+    let workspace_path = app_data_dir.join("workspace.json");
+
+    fs::write(&workspace_path, state_json)
+        .map_err(|e| format!("Failed to save workspace: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn load_workspace(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let app_data_dir = app_handle.path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data directory")?;
+
+    let workspace_path = app_data_dir.join("workspace.json");
+
+    if !workspace_path.exists() {
+        return Err("No saved workspace found".to_string());
+    }
+
+    let content = fs::read_to_string(&workspace_path)
+        .map_err(|e| format!("Failed to load workspace: {}", e))?;
+
+    Ok(content)
+}
+
+#[tauri::command]
+async fn list_clips(app_handle: tauri::AppHandle) -> Result<Vec<ClipInfo>, String> {
+    let app_data_dir = app_handle.path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data directory")?;
+
+    let clips_dir = app_data_dir.join("clips");
+
+    if !clips_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut clips = vec![];
+
+    for entry in fs::read_dir(&clips_dir)
+        .map_err(|e| format!("Failed to read clips dir: {}", e))?
+    {
+        let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+        let path = entry.path();
+
+        if path.is_file() {
+            let name = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
+            let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+            let path_str = path.to_str().unwrap_or("").to_string();
+
+            clips.push(ClipInfo {
+                name,
+                path: path_str,
+                size,
+            });
+        }
+    }
+
+    Ok(clips)
+}
+
+#[tauri::command]
+async fn delete_clip(file_path: String) -> Result<(), String> {
+    let path = Path::new(&file_path);
+
+    // Validate the file exists
+    if !path.exists() {
+        return Err(format!("File not found: {}", file_path));
+    }
+
+    // Validate the file is within allowed directories (clips or clips/edited)
+    let path_str = path.to_str().ok_or("Invalid file path")?;
+    if !path_str.contains("/clips/") && !path_str.contains("\\clips\\") {
+        return Err("Can only delete files in the clips directory".to_string());
+    }
+
+    // Delete the file
+    fs::remove_file(path)
+        .map_err(|e| format!("Failed to delete file: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn reset_workspace(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let app_data_dir = app_handle.path_resolver()
+        .app_data_dir()
+        .ok_or("Failed to get app data directory")?;
+
+    let clips_dir = app_data_dir.join("clips");
+    let workspace_file = app_data_dir.join("workspace.json");
+
+    // Delete workspace.json if it exists
+    if workspace_file.exists() {
+        fs::remove_file(&workspace_file)
+            .map_err(|e| format!("Failed to delete workspace file: {}", e))?;
+    }
+
+    // Delete all files in clips directory (including subdirectories)
+    if clips_dir.exists() {
+        fs::remove_dir_all(&clips_dir)
+            .map_err(|e| format!("Failed to delete clips directory: {}", e))?;
+
+        // Recreate empty clips directory
+        fs::create_dir_all(&clips_dir)
+            .map_err(|e| format!("Failed to recreate clips directory: {}", e))?;
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // Initialize nokhwa on macOS before starting Tauri app
@@ -520,7 +717,7 @@ pub fn run() {
   }
 
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, trim_clip, save_recording, export_video, record_webcam_clip])
+    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
