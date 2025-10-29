@@ -196,21 +196,37 @@ export function Timeline() {
       })
 
       // Make trimmed clip draggable (move clip position in timeline)
+      trimmedRect.on("mousedown", () => {
+        isDraggingRef.current = true
+        setSelectedClip(clip.id)
+        setPlayhead(clip.start + clip.trimStart) // Move playhead to trim start
+      })
+
       trimmedRect.on("moving", (e) => {
+        // Just constrain movement, don't update state
         const target = e.target
         if (!target) return
 
-        const newStart = ((target.left || 0) - trimStartOffset) / zoom
-        const duration = clip.end - clip.start
-        updateClip(clip.id, {
-          start: Math.max(0, newStart),
-          end: Math.max(0, newStart) + duration,
-        })
+        // Constrain to positive time only
+        const minX = 0
+        if ((target.left || 0) < minX) {
+          target.left = minX
+        }
       })
 
-      trimmedRect.on("mousedown", () => {
-        setSelectedClip(clip.id)
-        setPlayhead(clip.start + clip.trimStart) // Move playhead to trim start
+      trimmedRect.on("mouseup", (e) => {
+        const target = e.target
+        if (target) {
+          // Now update the state only once when drag ends
+          const newStart = Math.max(0, ((target.left || 0) - trimStartOffset) / zoom)
+          const duration = clip.end - clip.start
+          updateClip(clip.id, {
+            start: newStart,
+            end: newStart + duration,
+          })
+        }
+        isDraggingRef.current = false
+        setForceRender(prev => prev + 1)
       })
 
       // Make handles draggable for trimming
@@ -318,12 +334,31 @@ export function Timeline() {
       ry: 2,
     })
 
+    playheadHandle.on("mousedown", () => {
+      isDraggingRef.current = true
+    })
+
     playheadHandle.on("moving", (e) => {
+      // Just constrain movement, don't update state
       const target = e.target
       if (!target) return
 
-      const newTime = Math.max(0, ((target.left || 0) + 6) / zoom)
-      setPlayhead(newTime)
+      // Constrain to positive time only
+      const minX = -6
+      if ((target.left || 0) < minX) {
+        target.left = minX
+      }
+    })
+
+    playheadHandle.on("mouseup", (e) => {
+      const target = e.target
+      if (target) {
+        // Update state only once when drag ends
+        const newTime = Math.max(0, ((target.left || 0) + 6) / zoom)
+        setPlayhead(newTime)
+      }
+      isDraggingRef.current = false
+      setForceRender(prev => prev + 1)
     })
 
     playheadHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true })

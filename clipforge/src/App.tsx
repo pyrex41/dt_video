@@ -13,7 +13,7 @@ import { Alert, AlertDescription } from "./components/ui/alert"
 import { AlertCircle, Info } from "lucide-react"
 
 function App() {
-  const { error, setError, hydrateFromWorkspace, isHydrated } = useClipStore()
+  const { error, setError, hydrateFromWorkspace, isHydrated, isPlaying, setIsPlaying, selectedClipId, setSelectedClip, deleteClip, clips } = useClipStore()
 
   useEffect(() => {
     const initialize = async () => {
@@ -32,6 +32,51 @@ function App() {
 
     initialize()
   }, [setError, hydrateFromWorkspace])
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore keyboard shortcuts when typing in inputs
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return
+      }
+
+      switch (e.key) {
+        case ' ': // Space - play/pause
+          e.preventDefault()
+          setIsPlaying(!isPlaying)
+          break
+
+        case 'Delete': // Delete - remove selected clip
+        case 'Backspace':
+          e.preventDefault()
+          if (selectedClipId) {
+            deleteClip(selectedClipId)
+          }
+          break
+
+        case 'Escape': // Escape - deselect
+          e.preventDefault()
+          setSelectedClip(null)
+          break
+
+        case 'a': // Cmd+A / Ctrl+A - select all
+        case 'A':
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault()
+            // Select first clip (for now - full multi-select in future)
+            if (clips.length > 0) {
+              setSelectedClip(clips[0].id)
+            }
+          }
+          break
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isPlaying, setIsPlaying, selectedClipId, setSelectedClip, deleteClip, clips])
 
   // Show loading state while hydrating
   if (!isHydrated) {

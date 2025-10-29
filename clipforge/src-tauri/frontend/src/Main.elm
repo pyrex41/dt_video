@@ -407,7 +407,7 @@ update msg model =
 
                 Just (DraggingClip clipId offsetX) ->
                     let
-                        ( pageX, _ ) =
+                        ( pageX, pageY ) =
                             model.mousePos
 
                         -- Calculate new start time directly from mouse position
@@ -422,15 +422,52 @@ update msg model =
                         clampedStartTime =
                             max 0 snappedStartTime
 
-                        -- Get current clip to update it
+                        -- Determine target track based on mouse Y position
+                        targetTrack =
+                            getTrackFromY pageY
+
+                        -- Get current clip to check for track change
+                        currentClip =
+                            model.clips
+                                |> List.filter (\c -> c.id == clipId)
+                                |> List.head
+
+                        -- Check if track is changing
+                        trackChanged =
+                            case currentClip of
+                                Just clip ->
+                                    clip.track /= targetTrack
+
+                                Nothing ->
+                                    False
+
+                        -- Check for overlaps if track changed
+                        hasOverlap =
+                            if trackChanged then
+                                checkOverlapOnTrack model.clips clipId clampedStartTime targetTrack
+                            else
+                                False
+
+                        -- Update clip (only position for now, track change handled on mouse up)
                         updateClip clip =
                             if clip.id == clipId then
                                 { clip | startTime = clampedStartTime }
                             else
                                 clip
+
+                        -- Status message for drag feedback
+                        dragStatus =
+                            if trackChanged then
+                                if hasOverlap then
+                                    Just ( Warning, "Cannot drop here - overlaps with existing clip" )
+                                else
+                                    Just ( Info, "Moving to track " ++ String.fromInt targetTrack )
+                            else
+                                Just ( Info, "Dragging: " ++ (currentClip |> Maybe.map .fileName |> Maybe.withDefault "Unknown") )
                     in
                     ( { model
                         | clips = List.map updateClip model.clips
+                        , statusMessage = dragStatus
                       }
                     , Cmd.none
                     )
@@ -568,21 +605,54 @@ update msg model =
                                 update (SelectClip (Just clipId)) { model | dragging = Nothing, clickStartPos = Nothing }
 
                             else
-                                -- This was a drag, just finish the drag (keep selection unchanged)
-                                case List.filter (\c -> c.id == clipId) model.clips |> List.head of
-                                    Just clip ->
-                                        ( { model
-                                            | dragging = Nothing
-                                            , clickStartPos = Nothing
-                                            , statusMessage = Just ( Info, "Clip positioned at " ++ formatDuration clip.startTime )
-                                          }
-                                        , Cmd.none
-                                        )
+                                -- This was a drag, update position and potentially track
+                                let
+                                    -- Get final mouse position to determine target track
+                                    ( finalX, finalY ) = model.mousePos
+                                    targetTrack = getTrackFromY finalY
 
-                                    Nothing ->
-                                        ( { model | dragging = Nothing, clickStartPos = Nothing }
-                                        , Cmd.none
-                                        )
+                                    -- Get the clip that was dragged
+                                    draggedClip = List.filter (\c -> c.id == clipId) model.clips |> List.head
+
+                                    -- Check if track change is needed and safe
+                                    updateClip clip =
+                                        if clip.id == clipId then
+                                            let
+                                                -- Check for overlaps on target track
+                                                hasOverlap = checkOverlapOnTrack model.clips clipId clip.startTime targetTrack
+
+                                                newTrack =
+                                                    if hasOverlap then
+                                                        clip.track -- Keep original track if overlap
+                                                    else
+                                                        targetTrack -- Update to target track
+                                            in
+                                            { clip | track = newTrack }
+                                        else
+                                            clip
+
+                                    -- Status message
+                                    statusMsg =
+                                        case draggedClip of
+                                            Just clip ->
+                                                if checkOverlapOnTrack model.clips clipId clip.startTime targetTrack then
+                                                    Just ( Warning, "Kept on original track - would overlap on track " ++ String.fromInt targetTrack )
+                                                else if clip.track /= targetTrack then
+                                                    Just ( Success, "Moved to track " ++ String.fromInt targetTrack ++ " at " ++ formatDuration clip.startTime )
+                                                else
+                                                    Just ( Info, "Clip positioned at " ++ formatDuration clip.startTime )
+
+                                            Nothing ->
+                                                Just ( Info, "Drag completed" )
+                                in
+                                ( { model
+                                    | dragging = Nothing
+                                    , clickStartPos = Nothing
+                                    , clips = List.map updateClip model.clips
+                                    , statusMessage = statusMsg
+                                  }
+                                , Cmd.none
+                                )
 
                         Just (DraggingTrimStart clipId) ->
                             -- Find the clip and show trim values
@@ -1414,6 +1484,54 @@ getTimelineDuration model =
         |> Maybe.withDefault 0.0
 
 
+-- Helper function to determine track from Y coordinate
+getTrackFromY : Float -> Int
+getTrackFromY y =
+    let
+        track0Y = 30
+        track1Y = 110
+        trackHeight = 60
+    in
+    if y >= track0Y && y < (track0Y + trackHeight) then
+        0
+    else if y >= track1Y && y < (track1Y + trackHeight) then
+        1
+    else
+        0 -- Default to track 0 if outside track areas
+
+
+-- Helper function to check if a clip would overlap with others on a specific track
+checkOverlapOnTrack : List Clip -> String -> Float -> Int -> Bool
+checkOverlapOnTrack clips excludeClipId newStartTime targetTrack =
+    let
+        -- Get the clip being moved
+        movingClip =
+            clips
+                |> List.filter (\c -> c.id == excludeClipId)
+                |> List.head
+
+        -- Get duration of moving clip
+        movingDuration =
+            movingClip |> Maybe.map .duration |> Maybe.withDefault 0.0
+
+        newEndTime =
+            newStartTime + movingDuration
+
+        -- Check overlaps with other clips on target track (excluding the moving clip)
+        overlaps =
+            clips
+                |> List.filter (\c -> c.id /= excludeClipId && c.track == targetTrack)
+                |> List.any (\c ->
+                    let
+                        cEnd = c.startTime + c.duration
+                    in
+                    -- Check if time ranges overlap
+                    (newStartTime < cEnd) && (newEndTime > c.startTime)
+                )
+    in
+    overlaps
+
+
 -- Convert Main.Clip to MediaLibrary.Clip for the media library view
 clipToMediaLibraryClip : Clip -> MediaLibrary.Clip
 clipToMediaLibraryClip clip =
@@ -2009,7 +2127,7 @@ renderTimeline model canvasHeight =
         track1Y =
             110
 
-        -- PiP track Y position (below main track)
+        -- PiP track Y position
         trackHeight =
             60
 
@@ -2017,16 +2135,41 @@ renderTimeline model canvasHeight =
             20
 
         -- Space between tracks
+        -- Determine highlighted track during drag
+        highlightedTrack =
+            case model.dragging of
+                Just (DraggingClip _ _) ->
+                    Just (getTrackFromY (Tuple.second model.mousePos))
+
+                _ ->
+                    Nothing
+
+        -- Track background colors (brighter when highlighted)
+        track0Color =
+            case highlightedTrack of
+                Just 0 ->
+                    Color.rgb 0.15 0.15 0.18 -- Highlighted main track
+
+                _ ->
+                    Color.rgb 0.1 0.1 0.12 -- Normal main track
+
+        track1Color =
+            case highlightedTrack of
+                Just 1 ->
+                    Color.rgb 0.12 0.12 0.15 -- Highlighted PiP track
+
+                _ ->
+                    Color.rgb 0.08 0.08 0.1 -- Normal PiP track
     in
     [ -- Grid lines (snap-to-grid visualization)
       renderGridLines model.pixelsPerSecond (getTimelineDuration model) (toFloat canvasHeight)
     , -- Main track background (Track 0)
       Canvas.shapes
-        [ fill (Color.rgb 0.1 0.1 0.12) ]
+        [ fill track0Color ]
         [ Canvas.rect ( 0, track0Y ) model.timelineWidth trackHeight ]
     , -- PiP track background (Track 1)
       Canvas.shapes
-        [ fill (Color.rgb 0.08 0.08 0.1) ]
+        [ fill track1Color ]
         -- Slightly darker for PiP track
         [ Canvas.rect ( 0, track1Y ) model.timelineWidth trackHeight ]
     , -- Clips on both tracks
