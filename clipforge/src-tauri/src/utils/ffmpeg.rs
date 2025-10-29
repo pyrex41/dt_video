@@ -50,6 +50,7 @@ pub struct FfmpegBuilder {
     raw_input: Option<RawInputConfig>,
     concat_list: Option<String>,
     pixel_format: Option<String>,
+    app_handle: Option<tauri::AppHandle>,
 }
 
 #[derive(Clone)]
@@ -147,6 +148,12 @@ impl FfmpegBuilder {
     /// Set output pixel format
     pub fn pixel_format(mut self, format: &str) -> Self {
         self.pixel_format = Some(format.to_string());
+        self
+    }
+
+    /// Set app handle for sidecar binary resolution
+    pub fn with_app_handle(mut self, handle: tauri::AppHandle) -> Self {
+        self.app_handle = Some(handle);
         self
     }
 
@@ -250,6 +257,32 @@ impl FfmpegBuilder {
         args
     }
 
+    /// Resolve FFmpeg/FFprobe sidecar binary path
+    fn resolve_sidecar_binary(
+        app_handle: &tauri::AppHandle,
+        binary_name: &str,
+    ) -> Result<std::path::PathBuf, String> {
+        // Try bundled sidecar FIRST (required)
+        if let Some(resource_path) = app_handle
+            .path_resolver()
+            .resolve_resource(binary_name)
+        {
+            if resource_path.exists() {
+                return Ok(resource_path);
+            }
+        }
+
+        // Fallback with WARNING - emit to frontend
+        let error_msg = format!(
+            "Bundled binary '{}' not found! Using system fallback (not recommended)",
+            binary_name
+        );
+        eprintln!("ERROR: {}", error_msg);
+        let _ = app_handle.emit_all("ffmpeg-warning", &error_msg);
+
+        Err(error_msg)
+    }
+
     /// Execute the FFmpeg command synchronously (for short operations)
     pub fn run_sync(&self) -> FFmpegResult<String> {
         let args = self.build_args();
@@ -266,19 +299,42 @@ impl FfmpegBuilder {
 
     /// Execute command with sidecar fallback
     fn execute_command(&self, args: &[String]) -> FFmpegResult<std::process::Output> {
-        // Fallback to system FFmpeg
-        std::process::Command::new("ffmpeg")
+        // Require app_handle for sidecar resolution
+        let app_handle = self.app_handle.as_ref()
+            .ok_or_else(|| FFmpegError::CommandSpawn(
+                "app_handle required for binary resolution".to_string()
+            ))?;
+
+        // Try bundled binary FIRST
+        let binary_path = match Self::resolve_sidecar_binary(app_handle, "ffmpeg") {
+            Ok(path) => path,
+            Err(e) => {
+                // Emit warning, use system fallback
+                eprintln!("Warning: {}", e);
+                std::path::PathBuf::from("ffmpeg")
+            }
+        };
+
+        std::process::Command::new(binary_path)
             .args(args)
             .output()
             .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))
     }
 
     /// Execute the FFmpeg command asynchronously
-    pub fn run(&self, _app_handle: &tauri::AppHandle) -> FFmpegResult<String> {
+    pub fn run(&self, app_handle: &tauri::AppHandle) -> FFmpegResult<String> {
         let args = self.build_args();
 
-        // Fallback to system FFmpeg
-        let output = std::process::Command::new("ffmpeg")
+        // Try bundled binary first
+        let binary_path = match Self::resolve_sidecar_binary(app_handle, "ffmpeg") {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("Warning: {}", e);
+                std::path::PathBuf::from("ffmpeg")
+            }
+        };
+
+        let output = std::process::Command::new(binary_path)
             .args(&args)
             .output()
             .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))?;
@@ -304,7 +360,16 @@ impl FfmpegBuilder {
     pub async fn run_with_progress(&self, app_handle: &tauri::AppHandle, duration: Option<f64>) -> FFmpegResult<String> {
         let args = self.build_args();
 
-        let mut command = tokio::process::Command::new("ffmpeg");
+        // Resolve bundled binary
+        let binary_path = match Self::resolve_sidecar_binary(app_handle, "ffmpeg") {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("Warning: {}", e);
+                std::path::PathBuf::from("ffmpeg")
+            }
+        };
+
+        let mut command = tokio::process::Command::new(&binary_path);
         command.args(&args);
 
         if self.progress_enabled {
@@ -319,19 +384,52 @@ impl FfmpegBuilder {
                 let reader = AsyncBufReader::new(stderr);
                 let mut lines = reader.lines();
 
-                while let Ok(Some(line)) = lines.next_line().await {
-                    if line.starts_with("out_time=") {
-                        // Parse progress and emit to frontend
-                        if let Some(time_str) = line.strip_prefix("out_time=") {
-                            if let Ok(current_time) = parse_time(time_str) {
-                                let progress = if let Some(total) = duration {
-                                    (current_time / total * 100.0) as u32
-                                } else {
-                                    0
-                                };
+                // Throttling state
+                let mut last_progress_time = std::time::Instant::now();
+                const PROGRESS_THROTTLE_MS: u128 = 100; // 100ms = max 10 events/sec
 
-                                // Emit progress event
-                                let _ = app_handle.emit_all("ffmpeg-progress", progress);
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if line.starts_with("out_time_us=") {
+                        // Parse microseconds format (more accurate)
+                        if let Some(time_str) = line.strip_prefix("out_time_us=") {
+                            if let Ok(time_us) = time_str.trim().parse::<u64>() {
+                                let current_time = time_us as f64 / 1_000_000.0;  // Convert to seconds
+
+                                // Throttle: only emit if 100ms elapsed since last update
+                                let now = std::time::Instant::now();
+                                if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
+                                    last_progress_time = now;
+
+                                    let progress = if let Some(total) = duration {
+                                        ((current_time / total * 100.0).min(100.0)) as u32
+                                    } else {
+                                        0
+                                    };
+
+                                    // Emit progress event
+                                    let _ = app_handle.emit_all("ffmpeg-progress", progress);
+                                }
+                            }
+                        }
+                    } else if line.starts_with("out_time_ms=") {
+                        // Fallback to milliseconds if microseconds not available
+                        if let Some(time_str) = line.strip_prefix("out_time_ms=") {
+                            if let Ok(time_ms) = time_str.trim().parse::<u64>() {
+                                let current_time = time_ms as f64 / 1_000.0;  // Convert to seconds
+
+                                // Throttle
+                                let now = std::time::Instant::now();
+                                if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
+                                    last_progress_time = now;
+
+                                    let progress = if let Some(total) = duration {
+                                        ((current_time / total * 100.0).min(100.0)) as u32
+                                    } else {
+                                        0
+                                    };
+
+                                    let _ = app_handle.emit_all("ffmpeg-progress", progress);
+                                }
                             }
                         }
                     }
@@ -360,18 +458,24 @@ impl FfmpegBuilder {
     }
 }
 
-/// Parse FFmpeg time string (HH:MM:SS.ms) to seconds
-fn parse_time(time_str: &str) -> Result<f64, ()> {
-    let parts: Vec<&str> = time_str.split(':').collect();
-    if parts.len() != 3 {
-        return Err(());
-    }
+/// Execute FFprobe with sidecar support
+pub fn execute_ffprobe(
+    app_handle: &tauri::AppHandle,
+    args: &[&str],
+) -> FFmpegResult<std::process::Output> {
+    // Try sidecar binary first
+    let binary_path = match FfmpegBuilder::resolve_sidecar_binary(app_handle, "ffprobe") {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("Warning: {}", e);
+            std::path::PathBuf::from("ffprobe")  // Fallback
+        }
+    };
 
-    let hours: f64 = parts[0].parse().map_err(|_| ())?;
-    let minutes: f64 = parts[1].parse().map_err(|_| ())?;
-    let seconds: f64 = parts[2].parse().map_err(|_| ())?;
-
-    Ok(hours * 3600.0 + minutes * 60.0 + seconds)
+    std::process::Command::new(binary_path)
+        .args(args)
+        .output()
+        .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))
 }
 
 /// Helper for version checking
@@ -383,8 +487,17 @@ impl FfmpegBuilder {
     }
 
     /// Run version check (special case)
-    pub fn run_version_check(&self) -> FFmpegResult<String> {
-        let output = std::process::Command::new("ffmpeg")
+    pub fn run_version_check(&self, app_handle: &tauri::AppHandle) -> FFmpegResult<String> {
+        // Always try bundled binary
+        let binary_path = match Self::resolve_sidecar_binary(app_handle, "ffmpeg") {
+            Ok(path) => path,
+            Err(e) => {
+                eprintln!("Warning: {}", e);
+                std::path::PathBuf::from("ffmpeg")
+            }
+        };
+
+        let output = std::process::Command::new(binary_path)
             .args(["-version"])
             .output()
             .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))?;

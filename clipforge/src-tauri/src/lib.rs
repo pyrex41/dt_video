@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 use std::io::Write;
-use tauri::api::process::Command as TauriCommand;
 use nokhwa::pixel_format::RgbFormat;
 use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
@@ -54,9 +53,9 @@ struct ClipInfo {
 }
 
 #[tauri::command]
-fn check_ffmpeg() -> Result<String, String> {
-    // Use sync version for simple version check
-    match utils::ffmpeg::FfmpegBuilder::version_check().run_version_check() {
+fn check_ffmpeg(app_handle: tauri::AppHandle) -> Result<String, String> {
+    // Use bundled binary for version check
+    match utils::ffmpeg::FfmpegBuilder::version_check().run_version_check(&app_handle) {
         Ok(output) => Ok(output),
         Err(_) => Err("FFmpeg not found. Install via: brew install ffmpeg (macOS) or download from ffmpeg.org (Windows)".to_string()),
     }
@@ -81,24 +80,24 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
     }
 
     // Extract metadata using ffprobe
-    let output = TauriCommand::new_sidecar("ffprobe")
-        .expect("failed to create ffprobe command")
-        .args(&[
+    let output = utils::ffmpeg::execute_ffprobe(
+        &app_handle,
+        &[
             "-v", "error",
             "-select_streams", "v:0",
             "-show_entries", "stream=width,height,duration,codec_name,r_frame_rate,bit_rate",
             "-of", "json",
             &file_path
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run ffprobe: {}", e))?;
+        ]
+    ).map_err(|e| format!("Failed to run ffprobe: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!("FFprobe failed: {}", output.stderr));
+        return Err(format!("FFprobe failed: {}", String::from_utf8_lossy(&output.stderr)));
     }
 
     // Parse ffprobe JSON output
-    let metadata_json: serde_json::Value = serde_json::from_str(&output.stdout)
+    let stdout_str = String::from_utf8_lossy(&output.stdout);
+    let metadata_json: serde_json::Value = serde_json::from_str(&stdout_str)
         .map_err(|e| format!("Failed to parse ffprobe output: {}", e))?;
 
     let stream = metadata_json["streams"]

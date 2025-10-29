@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { invoke } from "@tauri-apps/api/tauri"
+import { listen } from "@tauri-apps/api/event"
 import { Header } from "./components/header"
 import { Timeline } from "./components/timeline"
 import { Preview } from "./components/preview"
@@ -77,6 +78,24 @@ function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isPlaying, setIsPlaying, selectedClipId, setSelectedClip, deleteClip, clips])
+
+  // Listen for FFmpeg warnings from backend
+  useEffect(() => {
+    const setupListener = async () => {
+      const unlisten = await listen<string>('ffmpeg-warning', (event) => {
+        console.error('FFmpeg Warning:', event.payload)
+        setError(event.payload)
+      })
+      return unlisten
+    }
+
+    let unlistenFn: (() => void) | null = null
+    setupListener().then(fn => { unlistenFn = fn })
+
+    return () => {
+      if (unlistenFn) unlistenFn()
+    }
+  }, [setError])
 
   // Show loading state while hydrating
   if (!isHydrated) {
