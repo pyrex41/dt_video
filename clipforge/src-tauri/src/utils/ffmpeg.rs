@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader as AsyncBufReader};
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 
 
 
@@ -263,10 +263,8 @@ impl FfmpegBuilder {
         binary_name: &str,
     ) -> Result<std::path::PathBuf, String> {
         // Try bundled sidecar FIRST (required)
-        if let Some(resource_path) = app_handle
-            .path_resolver()
-            .resolve_resource(binary_name)
-        {
+        if let Ok(resource_dir) = app_handle.path().resource_dir() {
+            let resource_path = resource_dir.join(binary_name);
             if resource_path.exists() {
                 return Ok(resource_path);
             }
@@ -278,7 +276,7 @@ impl FfmpegBuilder {
             binary_name
         );
         eprintln!("ERROR: {}", error_msg);
-        let _ = app_handle.emit_all("ffmpeg-warning", &error_msg);
+        let _ = app_handle.emit("ffmpeg-warning", &error_msg);
 
         Err(error_msg)
     }
@@ -407,7 +405,7 @@ impl FfmpegBuilder {
                                     };
 
                                     // Emit progress event
-                                    let _ = app_handle.emit_all("ffmpeg-progress", progress);
+                                    let _ = app_handle.emit("ffmpeg-progress", progress);
                                 }
                             }
                         }
@@ -428,7 +426,7 @@ impl FfmpegBuilder {
                                         0
                                     };
 
-                                    let _ = app_handle.emit_all("ffmpeg-progress", progress);
+                                    let _ = app_handle.emit("ffmpeg-progress", progress);
                                 }
                             }
                         }

@@ -45,10 +45,8 @@
         "fullscreen": false,
         "resizable": true,
         "title": "ClipForge (React)",
-        "width": 1680,
-        "height": 1200,
-        "minWidth": 1200,
-        "minHeight": 800
+        "width": 800,
+        "height": 600
       }
     ]
   }

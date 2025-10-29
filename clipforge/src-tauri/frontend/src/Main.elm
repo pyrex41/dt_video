@@ -35,7 +35,7 @@ import Canvas.Settings.Advanced exposing (transform, translate)
 import Canvas.Settings.Line exposing (lineWidth)
 import Color
 import Html exposing (Html, button, div, h2, h3, p, span, text)
-import Html.Attributes exposing (class, id, style)
+import Html.Attributes exposing (class, id, style, href)
 import Html.Events exposing (onClick)
 import Json.Decode as Decode exposing (Decoder)
 import Json.Encode as Encode
@@ -1852,8 +1852,8 @@ subscriptions model =
 view : Model -> Html Msg
 view model =
     div
-        [ class "flex flex-col min-h-screen bg-gray-900 text-white"
-        , Html.Events.onClick HideContextMenu -- Hide context menu on any click
+        [ id "root"
+        , Html.Events.onClick HideContextMenu
         ]
         [ viewHeader model
         , viewStatusMessage model
@@ -1863,15 +1863,8 @@ view model =
 
 viewHeader : Model -> Html Msg
 viewHeader model =
-    div
-        [ class "bg-gray-800 border-b border-gray-700 px-6 py-4" ]
-        [ div
-            [ class "flex items-center justify-between" ]
-            [ h2
-                [ class "text-2xl font-bold text-blue-400" ]
-                [ text model.appName ]
-            ]
-        ]
+    div [ class "header" ]
+        [ h2 [] [ text model.appName ] ]
 
 
 viewStatusMessage : Model -> Html Msg
@@ -1882,22 +1875,22 @@ viewStatusMessage model =
 
         Just ( msgType, content ) ->
             let
-                ( bgColor, icon, textColor ) =
+                msgClass =
                     case msgType of
-                        Success ->
-                            ( "bg-green-600", "✓", "text-white" )
-
-                        Info ->
-                            ( "bg-blue-600", "ℹ", "text-white" )
-
-                        Warning ->
-                            ( "bg-yellow-500", "⚠", "text-black" )
-
-                        Error ->
-                            ( "bg-red-600", "✗", "text-white" )
+                        Success -> "status-message success"
+                        Info -> "status-message info"
+                        Warning -> "status-message warning"
+                        Error -> "status-message error"
             in
-            div
-                [ class ("fixed top-4 right-4 " ++ bgColor ++ " " ++ textColor ++ " px-6 py-3 rounded-lg shadow-lg flex items-center space-x-3 z-50 animate-fade-in")
+            div [ class msgClass ]
+                [ span [ class "text-xl font-bold" ] [ text (case msgType of Success -> "✓"; Info -> "ℹ"; Warning -> "⚠"; Error -> "✗") ]
+                , span [ class "font-semibold" ] [ text content ]
+                , button
+                    [ class "close"
+                    , onClick DismissMessage
+                    , Html.Attributes.title "Dismiss"
+                    ]
+                    [ text "×" ]
                 ]
                 [ span [ class "text-xl font-bold" ] [ text icon ]
                 , span [ class "font-semibold" ] [ text content ]
@@ -1912,28 +1905,56 @@ viewStatusMessage model =
 
 viewMainContent : Model -> Html Msg
 viewMainContent model =
-    div
-        [ class "flex flex-1 overflow-hidden" ]
-        [ div
-            [ class "flex flex-col flex-1" ]
-            [ viewImportArea model
-            , viewTimeline model
+    div [ class "main-content" ]
+        [ div [ class "timeline-area" ]
+            [ div [ class "timeline-container" ]
+                [ viewTimeline model ]
             ]
-        , Html.map MediaLibraryMsg (MediaLibrary.view (List.map clipToMediaLibraryClip model.clips) model.mediaLibrary)
+        , div [ class "media-library" ]
+            [ h3 [ class "media-library-header" ] [ text "Media Library" ]
+            , Html.map MediaLibraryMsg (MediaLibrary.view (List.map clipToMediaLibraryClip model.clips) model.mediaLibrary)
+            ]
+        , viewPreview model
+        ]
+        , div [ class "w-80 bg-gray-800 border-l border-gray-700 p-4 overflow-y-auto" ]
+            [ Html.map MediaLibraryMsg (MediaLibrary.view (List.map clipToMediaLibraryClip model.clips) model.mediaLibrary) ]
         , viewPreview model
         ]
 
 
 viewImportArea : Model -> Html Msg
 viewImportArea model =
-    div
-        [ class "bg-gray-800 border-b border-gray-700 px-6 py-4" ]
-        [ div
-            [ class "flex items-center gap-4 flex-wrap" ]
-            [ button
-                [ class "bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 flex items-center gap-2"
-                , onClick RequestImport
+    div [ class "import-area" ]
+        [ button
+            [ class "btn btn-primary"
+            , onClick RequestImport
+            ]
+            [ text "📁 Import Video" ]
+        , button
+            [ class "btn btn-secondary"
+            , onClick ExportVideo
+            , Html.Attributes.disabled (List.isEmpty model.clips || model.isExporting)
+            ]
+            [ text "💾 Export" ]
+        , viewRecordingButton model
+        , if List.isEmpty model.clips then
+            text ""
+          else
+            span [ class "status-count" ] [ text ("(" ++ String.fromInt (List.length model.clips) ++ " clips)") ]
+        , if model.isExporting then
+            div [ class "export-progress" ]
+                [ div [ class "progress-bar" ]
+                    [ div
+                        [ class "progress-fill"
+                        , style "width" (String.fromFloat model.exportProgress ++ "%")
+                        ]
+                        []
+                    ]
+                , span [ class "progress-text" ] [ text (String.fromInt (round model.exportProgress) ++ "%") ]
                 ]
+          else
+            text ""
+        ]
                 [ text "📁 Import Video" ]
             , button
                 [ class "bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 flex items-center gap-2"

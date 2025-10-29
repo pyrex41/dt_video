@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { convertFileSrc } from "@tauri-apps/api/tauri"
+import { convertFileSrc, invoke } from "@tauri-apps/api/tauri"
 import { Button } from "./ui/button"
-import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp, Search, Trash2, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp, Search, Trash2, X, RefreshCw } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import { Input } from "./ui/input"
 
@@ -12,6 +12,7 @@ export function MediaLibrary() {
   const [expandedClipId, setExpandedClipId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const [isRegeneratingThumbnails, setIsRegeneratingThumbnails] = useState(false)
   const { clips, deleteClip } = useClipStore()
 
   const formatDuration = (seconds: number): string => {
@@ -72,6 +73,21 @@ export function MediaLibrary() {
     }
   }
 
+  const handleRegenerateThumbnails = async () => {
+    try {
+      setIsRegeneratingThumbnails(true)
+      await invoke('regenerate_thumbnails')
+      alert('Thumbnails regenerated successfully!')
+      // Force a re-render by triggering a state update
+      window.location.reload()
+    } catch (err) {
+      console.error('[MediaLibrary] Thumbnail regeneration failed:', err)
+      alert('Failed to regenerate thumbnails. Please check the console for details.')
+    } finally {
+      setIsRegeneratingThumbnails(false)
+    }
+  }
+
   return (
     <div
       className={`relative flex flex-col bg-zinc-900 border-r border-zinc-700 transition-all duration-300 ${
@@ -104,15 +120,26 @@ export function MediaLibrary() {
         <>
           {/* Header */}
           <div className="p-4 border-b border-zinc-700 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Film className="h-5 w-5 text-blue-500" />
-                <h2 className="text-lg font-semibold">Media Library</h2>
-              </div>
-              <div className="text-xs text-zinc-500">
-                {filteredClips.length} of {clips.length}
-              </div>
-            </div>
+             <div className="flex items-center justify-between">
+               <div className="flex items-center gap-2">
+                 <Film className="h-5 w-5 text-blue-500" />
+                 <h2 className="text-lg font-semibold">Media Library</h2>
+               </div>
+               <div className="flex items-center gap-2">
+                 <button
+                   onClick={handleRegenerateThumbnails}
+                   disabled={isRegeneratingThumbnails}
+                   className="flex items-center gap-1 text-xs text-blue-400 hover:text-blue-300 disabled:text-zinc-500 disabled:cursor-not-allowed transition-colors"
+                   title="Regenerate thumbnails for clips without them"
+                 >
+                   <RefreshCw className={`h-3 w-3 ${isRegeneratingThumbnails ? 'animate-spin' : ''}`} />
+                   {isRegeneratingThumbnails ? 'Generating...' : 'Thumbnails'}
+                 </button>
+                 <div className="text-xs text-zinc-500">
+                   {filteredClips.length} of {clips.length}
+                 </div>
+               </div>
+             </div>
 
             {/* Search Bar */}
             <div className="relative">

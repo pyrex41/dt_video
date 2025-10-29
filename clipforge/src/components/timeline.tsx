@@ -16,15 +16,21 @@ export function Timeline() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const fabricCanvasRef = useRef<Canvas | null>(null)
   const isDraggingRef = useRef(false)
+  const isPanningRef = useRef(false)
+  const panStartRef = useRef({ x: 0, scrollOffset: 0 })
   const [forceRender, setForceRender] = useState(0)
-  const { clips, playhead, setPlayhead, zoom, selectedClipId, setSelectedClip, updateClip, trimClip, deleteClip, autoFitZoom } = useClipStore()
+  const { clips, playhead, setPlayhead, zoom, scrollOffset, setScrollOffset, selectedClipId, setSelectedClip, updateClip, trimClip, deleteClip, autoFitZoom } = useClipStore()
 
   // Initialize Fabric.js canvas
   useEffect(() => {
     if (!canvasRef.current) return
 
+    const parent = canvasRef.current.parentElement
+    const parentWidth = parent?.offsetWidth || 800
+    console.log('[Timeline] Initializing canvas - parent width:', parentWidth)
+
     const canvas = new Canvas(canvasRef.current, {
-      width: canvasRef.current.parentElement?.offsetWidth || 800,
+      width: parentWidth,
       height: TIMELINE_HEIGHT,
       backgroundColor: "#18181b", // zinc-900
       selection: false,
@@ -32,18 +38,48 @@ export function Timeline() {
 
     fabricCanvasRef.current = canvas
 
-    // Handle window resize
+    // Handle resize
     const handleResize = () => {
       const width = canvasRef.current?.parentElement?.offsetWidth || 800
-      canvas.setDimensions({ width, height: TIMELINE_HEIGHT })
-      canvas.renderAll()
+      const currentWidth = canvas.getWidth()
+
+      if (width !== currentWidth) {
+        console.log('[Timeline] Resizing canvas from', currentWidth, 'to', width)
+        canvas.setDimensions({ width, height: TIMELINE_HEIGHT })
+        setForceRender(prev => prev + 1) // Trigger full re-render of clips
+      }
     }
 
-    window.addEventListener("resize", handleResize)
+    // Window resize handler - check immediately
+    const windowResizeHandler = () => {
+      console.log('[Timeline] Window resize event fired')
+      handleResize()
+    }
+
+    // Listen to window resize
+    window.addEventListener("resize", windowResizeHandler)
+
+    // Poll for size changes - sync Fabric canvas internal dimensions with CSS width
+    const pollInterval = setInterval(() => {
+      if (!canvasRef.current) return
+
+      // Get the actual rendered width of the canvas element (after CSS width: 100%)
+      const renderedWidth = canvasRef.current.offsetWidth
+      const fabricWidth = canvas.getWidth()
+
+      if (renderedWidth !== fabricWidth && renderedWidth > 0) {
+        console.log('[Timeline] Syncing Fabric canvas dimensions from', fabricWidth, 'to', renderedWidth)
+        canvas.setDimensions({ width: renderedWidth, height: TIMELINE_HEIGHT })
+        setForceRender(prev => prev + 1)
+      }
+    }, 100) // Check frequently (every 100ms)
 
     return () => {
-      window.removeEventListener("resize", handleResize)
-      canvas.dispose()
+      window.removeEventListener("resize", windowResizeHandler)
+      clearInterval(pollInterval)
+      if (fabricCanvasRef.current) {
+        fabricCanvasRef.current.dispose()
+      }
     }
   }, [])
 
@@ -73,8 +109,26 @@ export function Timeline() {
       return
     }
 
+    // Sync canvas width with actual rendered width BEFORE rendering
+    if (canvasRef.current) {
+      const renderedWidth = canvasRef.current.offsetWidth
+      if (renderedWidth > 0 && renderedWidth !== canvas.getWidth()) {
+        console.log('[Timeline] Syncing width before render:', renderedWidth)
+        canvas.setDimensions({ width: renderedWidth, height: TIMELINE_HEIGHT })
+      }
+    }
+
     canvas.clear()
     canvas.backgroundColor = "#18181b" // zinc-900
+
+    // Create clipping path to prevent content from rendering over track labels
+    canvas.clipPath = new Rect({
+      left: TRACK_LABEL_WIDTH,
+      top: 0,
+      width: (canvas.width || 800) - TRACK_LABEL_WIDTH,
+      height: TIMELINE_HEIGHT,
+      absolutePositioned: true,
+    })
 
     // Draw track backgrounds and labels
     for (let trackNum = 0; trackNum < NUM_TRACKS; trackNum++) {
@@ -110,10 +164,34 @@ export function Timeline() {
     const canvasWidth = canvas.width || 800
     const maxDuration = clips.length > 0 ? Math.max(...clips.map(c => c.end)) : 60
     const secondsVisible = Math.max(maxDuration * 1.2, 60) // Add 20% padding
-    const markerInterval = secondsVisible > 120 ? 10 : secondsVisible > 60 ? 5 : 1
+
+    // Dynamic marker interval based on zoom level
+    // When zoomed out, show minutes; when zoomed in, show seconds
+    let markerInterval: number
+    let useMinutes = false
+
+    if (zoom < 5) {
+      // Zoomed out - show minutes
+      markerInterval = 60 // Every minute
+      useMinutes = true
+    } else if (zoom < 10) {
+      // Medium zoom - show 10-second intervals
+      markerInterval = 10
+    } else if (zoom < 20) {
+      // More zoomed in - show 5-second intervals
+      markerInterval = 5
+    } else {
+      // Very zoomed in - show every second
+      markerInterval = 1
+    }
 
     for (let i = 0; i <= secondsVisible; i += markerInterval) {
-      const x = i * zoom
+      const x = i * zoom - scrollOffset + TRACK_LABEL_WIDTH
+
+      // Skip markers that are off-screen to the left
+      if (x < TRACK_LABEL_WIDTH) continue
+      // Skip markers that are off-screen to the right
+      if (x > canvas.width!) break
 
       // Ruler line
       const line = new Line([x, RULER_HEIGHT - 10, x, RULER_HEIGHT], {
@@ -124,8 +202,12 @@ export function Timeline() {
       })
       canvas.add(line)
 
-      // Time label
-      const timeText = new Text(`${i}s`, {
+      // Time label - show minutes or seconds based on zoom
+      const timeLabel = useMinutes
+        ? `${Math.floor(i / 60)}m${i % 60 === 0 ? '' : ` ${i % 60}s`}`
+        : `${i}s`
+
+      const timeText = new Text(timeLabel, {
         left: x + 4,
         top: RULER_HEIGHT - 30,
         fontSize: 11,
@@ -138,8 +220,13 @@ export function Timeline() {
 
     // Draw clips
     clips.forEach((clip) => {
-      const x = clip.start * zoom + TRACK_LABEL_WIDTH
+      const x = clip.start * zoom - scrollOffset + TRACK_LABEL_WIDTH
       const fullWidth = (clip.end - clip.start) * zoom
+
+      // Skip clips that are completely off-screen to the left
+      if (x + fullWidth < TRACK_LABEL_WIDTH) return
+      // Skip clips that are completely off-screen to the right
+      if (x > canvas.width!) return
 
       // Calculate trim handle positions within the clip
       const trimStartOffset = clip.trimStart * zoom
@@ -291,26 +378,55 @@ export function Timeline() {
           }
 
           // Check for overlaps on the target track
-          const hasOverlap = clips.some(c =>
-            c.id !== clip.id &&
-            c.track === newTrack &&
-            ((newStart >= c.start && newStart < c.end) ||
-             (newStart + duration > c.start && newStart + duration <= c.end) ||
-             (newStart <= c.start && newStart + duration >= c.end))
+          const clipsOnTrack = clips.filter(c => c.id !== clip.id && c.track === newTrack)
+          const sortedClips = [...clipsOnTrack].sort((a, b) => a.start - b.start)
+
+          const hasOverlap = sortedClips.some(c =>
+            (newStart >= c.start && newStart < c.end) ||
+            (newStart + duration > c.start && newStart + duration <= c.end) ||
+            (newStart <= c.start && newStart + duration > c.start)
           )
 
+          let finalStart = newStart
+
           if (hasOverlap) {
-            // Show warning and revert to original position
-            alert(`⚠️ Cannot place clip here - overlaps with another clip on Track ${newTrack + 1}`)
-            setForceRender(prev => prev + 1) // Force re-render to reset position
-          } else {
-            // Update clip position and track
-            updateClip(clip.id, {
-              start: newStart,
-              end: newStart + duration,
-              track: newTrack,
-            })
+            // Find the clip(s) we're overlapping with
+            const overlappingClips = sortedClips.filter(c =>
+              (newStart >= c.start && newStart < c.end) ||
+              (newStart + duration > c.start && newStart + duration <= c.end) ||
+              (newStart <= c.start && newStart + duration > c.start)
+            )
+
+            if (overlappingClips.length > 0) {
+              // Find the end of the last overlapping clip
+              const lastOverlappingClip = overlappingClips[overlappingClips.length - 1]
+              const afterLastClip = lastOverlappingClip.end
+
+              // Check if there's a gap after this clip that fits our clip
+              const nextClipAfter = sortedClips.find(c => c.start >= afterLastClip)
+
+              if (nextClipAfter) {
+                const gapSize = nextClipAfter.start - afterLastClip
+                if (gapSize >= duration) {
+                  // Fits in the gap
+                  finalStart = afterLastClip
+                } else {
+                  // Doesn't fit, place after the next clip
+                  finalStart = nextClipAfter.end
+                }
+              } else {
+                // No clips after, place at the end
+                finalStart = afterLastClip
+              }
+            }
           }
+
+          // Update clip position and track
+          updateClip(clip.id, {
+            start: finalStart,
+            end: finalStart + duration,
+            track: newTrack,
+          })
         }
         isDraggingRef.current = false
         setForceRender(prev => prev + 1)
@@ -402,67 +518,70 @@ export function Timeline() {
       canvas.add(leftHandle, rightHandle)
     })
 
-    // Draw playhead
-    const playheadX = playhead * zoom + TRACK_LABEL_WIDTH
-    const playheadLine = new Line([playheadX, 0, playheadX, TIMELINE_HEIGHT], {
-      stroke: "#ef4444", // red-500
-      strokeWidth: 2,
-      selectable: false,
-      evented: false,
-    })
+    // Draw playhead (only if visible)
+    const playheadX = playhead * zoom - scrollOffset + TRACK_LABEL_WIDTH
 
-    const playheadHandle = new Rect({
-      left: playheadX - 6,
-      top: 0,
-      width: 12,
-      height: 12,
-      fill: "#ef4444", // red-500
-      rx: 2,
-      ry: 2,
-    })
+    if (playheadX >= TRACK_LABEL_WIDTH && playheadX <= canvas.width!) {
+      const playheadLine = new Line([playheadX, 0, playheadX, TIMELINE_HEIGHT], {
+        stroke: "#ef4444", // red-500
+        strokeWidth: 2,
+        selectable: false,
+        evented: false,
+      })
 
-    playheadHandle.on("mousedown", () => {
-      isDraggingRef.current = true
-    })
+      const playheadHandle = new Rect({
+        left: playheadX - 6,
+        top: 0,
+        width: 12,
+        height: 12,
+        fill: "#ef4444", // red-500
+        rx: 2,
+        ry: 2,
+      })
 
-    playheadHandle.on("moving", (e) => {
-      // Just constrain movement, don't update state
-      const target = e.target
-      if (!target) return
+      playheadHandle.on("mousedown", () => {
+        isDraggingRef.current = true
+      })
 
-      // Constrain to valid timeline area (account for track label)
-      const minX = TRACK_LABEL_WIDTH - 6
-      if ((target.left || 0) < minX) {
-        target.left = minX
-      }
-    })
+      playheadHandle.on("moving", (e) => {
+        // Just constrain movement, don't update state
+        const target = e.target
+        if (!target) return
 
-    playheadHandle.on("mouseup", (e) => {
-      const target = e.target
-      if (target) {
-        // Update state only once when drag ends
-        const newTime = Math.max(0, ((target.left || 0) + 6 - TRACK_LABEL_WIDTH) / zoom)
-        setPlayhead(newTime)
-      }
-      isDraggingRef.current = false
-      setForceRender(prev => prev + 1)
-    })
+        // Constrain to valid timeline area (account for track label)
+        const minX = TRACK_LABEL_WIDTH - 6
+        if ((target.left || 0) < minX) {
+          target.left = minX
+        }
+      })
 
-    playheadHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true })
+      playheadHandle.on("mouseup", (e) => {
+        const target = e.target
+        if (target) {
+          // Update state only once when drag ends
+          const newTime = Math.max(0, ((target.left || 0) + 6 - TRACK_LABEL_WIDTH) / zoom)
+          setPlayhead(newTime)
+        }
+        isDraggingRef.current = false
+        setForceRender(prev => prev + 1)
+      })
 
-    canvas.add(playheadLine, playheadHandle)
+      playheadHandle.set({ lockMovementY: true, lockRotation: true, lockScalingX: true, lockScalingY: true })
+
+      canvas.add(playheadLine, playheadHandle)
+    }
 
     // Click on timeline to move playhead
     canvas.on("mouse:down", (e) => {
       if (!e.target) {
         const pointer = canvas.getPointer(e.e)
-        const newTime = Math.max(0, (pointer.x - TRACK_LABEL_WIDTH) / zoom)
+        const newTime = Math.max(0, (pointer.x - TRACK_LABEL_WIDTH + scrollOffset) / zoom)
         setPlayhead(newTime)
       }
     })
 
     canvas.renderAll()
-  }, [clips, playhead, zoom, selectedClipId, setPlayhead, setSelectedClip, updateClip, trimClip, deleteClip, forceRender])
+  }, [clips, playhead, zoom, scrollOffset, selectedClipId, setPlayhead, setSelectedClip, updateClip, trimClip, deleteClip, forceRender])
 
   // Handle drag and drop from media library
   const handleDragOver = (e: React.DragEvent) => {
@@ -483,17 +602,64 @@ export function Timeline() {
       if (!rect) return
 
       const dropX = e.clientX - rect.left
-      const dropTime = Math.max(0, dropX / zoom)
+      const dropY = e.clientY - rect.top
+      const dropTime = Math.max(0, (dropX - TRACK_LABEL_WIDTH) / zoom)
 
-      // Create a new clip instance from the library clip
-      // Find the end of the timeline to place it sequentially by default
-      const existingClips = clips
-      const lastClipEnd = existingClips.length > 0
-        ? Math.max(...existingClips.map(c => c.end))
-        : 0
+      // Calculate which track was dropped on
+      let targetTrack = 0
+      for (let i = 0; i < NUM_TRACKS; i++) {
+        const trackY = getTrackY(i)
+        if (dropY >= trackY && dropY <= trackY + TRACK_HEIGHT) {
+          targetTrack = i
+          break
+        }
+      }
 
-      // Use drop position if it's after existing clips, otherwise append
-      const startTime = Math.max(dropTime, lastClipEnd)
+      // Find next available position on the target track
+      const clipsOnTrack = clips.filter(c => c.track === targetTrack)
+      let startTime = dropTime
+
+      // Sort clips on track by start time
+      const sortedClips = [...clipsOnTrack].sort((a, b) => a.start - b.start)
+
+      // Check if dropping in an occupied space
+      const hasOverlap = sortedClips.some(c =>
+        (startTime >= c.start && startTime < c.end) ||
+        (startTime + clipData.duration > c.start && startTime + clipData.duration <= c.end) ||
+        (startTime <= c.start && startTime + clipData.duration > c.start)
+      )
+
+      if (hasOverlap) {
+        // Find the clip(s) we're overlapping with
+        const overlappingClips = sortedClips.filter(c =>
+          (startTime >= c.start && startTime < c.end) ||
+          (startTime + clipData.duration > c.start && startTime + clipData.duration <= c.end) ||
+          (startTime <= c.start && startTime + clipData.duration > c.start)
+        )
+
+        if (overlappingClips.length > 0) {
+          // Find the end of the last overlapping clip
+          const lastOverlappingClip = overlappingClips[overlappingClips.length - 1]
+          const afterLastClip = lastOverlappingClip.end
+
+          // Check if there's a gap after this clip that fits our clip
+          const nextClipAfter = sortedClips.find(c => c.start >= afterLastClip)
+
+          if (nextClipAfter) {
+            const gapSize = nextClipAfter.start - afterLastClip
+            if (gapSize >= clipData.duration) {
+              // Fits in the gap
+              startTime = afterLastClip
+            } else {
+              // Doesn't fit, place after the next clip
+              startTime = nextClipAfter.end
+            }
+          } else {
+            // No clips after, place at the end
+            startTime = afterLastClip
+          }
+        }
+      }
 
       // Generate new unique ID for the timeline instance
       const newClip = {
@@ -503,7 +669,7 @@ export function Timeline() {
         end: startTime + clipData.duration,
         trimStart: clipData.trimStart || 0,
         trimEnd: clipData.trimEnd || clipData.duration,
-        track: 0, // Default to main track
+        track: targetTrack,
       }
 
       // Add to timeline
@@ -511,19 +677,68 @@ export function Timeline() {
       setPlayhead(startTime)
       setSelectedClip(newClip.id)
 
-      console.log('[ClipForge] Clip dropped on timeline:', { dropTime, startTime, clip: newClip })
+      console.log('[ClipForge] Clip dropped on timeline:', {
+        dropTime,
+        startTime,
+        targetTrack,
+        hasOverlap,
+        clip: newClip
+      })
     } catch (err) {
       console.error('[ClipForge] Failed to drop clip:', err)
     }
   }
 
+  // Handle horizontal scrolling with mouse wheel / trackpad
+  const handleWheel = (e: React.WheelEvent) => {
+    // Only handle horizontal scroll or shift+vertical scroll
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) {
+      e.preventDefault()
+      const delta = e.deltaX !== 0 ? e.deltaX : e.deltaY
+      setScrollOffset(scrollOffset + delta)
+    }
+  }
+
+  // Handle space+drag panning
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 1 || e.spaceKey) { // Middle mouse or space key
+      e.preventDefault()
+      isPanningRef.current = true
+      panStartRef.current = { x: e.clientX, scrollOffset }
+    }
+  }
+
+  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (isPanningRef.current) {
+      e.preventDefault()
+      const deltaX = panStartRef.current.x - e.clientX
+      setScrollOffset(panStartRef.current.scrollOffset + deltaX)
+    }
+  }
+
+  const handleCanvasMouseUp = () => {
+    isPanningRef.current = false
+  }
+
   return (
     <div
-      className="relative border-t border-zinc-800 bg-zinc-900"
+      className="relative w-full border-t border-zinc-800 bg-zinc-900 overflow-hidden"
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      onWheel={handleWheel}
     >
-      <canvas ref={canvasRef} />
+      <canvas
+        ref={canvasRef}
+        style={{
+          width: '100%',
+          display: 'block',
+          cursor: isPanningRef.current ? 'grabbing' : 'default'
+        }}
+        onMouseDown={handleCanvasMouseDown}
+        onMouseMove={handleCanvasMouseMove}
+        onMouseUp={handleCanvasMouseUp}
+        onMouseLeave={handleCanvasMouseUp}
+      />
     </div>
   )
 }

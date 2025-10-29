@@ -9,6 +9,7 @@ interface ClipStore {
   playhead: number
   isPlaying: boolean
   zoom: number
+  scrollOffset: number
   selectedClipId: string | null
   error: string | null
   exportProgress: number
@@ -21,6 +22,7 @@ interface ClipStore {
   setPlayhead: (time: number) => void
   setIsPlaying: (playing: boolean) => void
   setZoom: (zoom: number) => void
+  setScrollOffset: (offset: number) => void
   autoFitZoom: (timelineWidth: number) => void
   setSelectedClip: (id: string | null) => void
   setError: (error: string | null) => void
@@ -38,6 +40,7 @@ export const useClipStore = create<ClipStore>()(
   playhead: 0,
   isPlaying: false,
   zoom: 10,
+  scrollOffset: 0,
   selectedClipId: null,
   error: null,
   exportProgress: 0,
@@ -82,6 +85,7 @@ export const useClipStore = create<ClipStore>()(
   setPlayhead: (time) => set({ playhead: time }),
   setIsPlaying: (playing) => set({ isPlaying: playing }),
   setZoom: (zoom) => set({ zoom }),
+  setScrollOffset: (offset) => set({ scrollOffset: Math.max(0, offset) }),
 
   autoFitZoom: (timelineWidth) => {
     const state = get()
@@ -97,8 +101,8 @@ export const useClipStore = create<ClipStore>()(
     const usableWidth = timelineWidth * 0.9
     const calculatedZoom = usableWidth / maxDuration
 
-    // Clamp between reasonable values
-    const zoom = Math.max(5, Math.min(50, calculatedZoom))
+    // Clamp between reasonable values - allow much more zoom out (down to 0.5)
+    const zoom = Math.max(0.5, Math.min(50, calculatedZoom))
 
     console.log('[ClipForge] Auto-fit zoom:', { timelineWidth, maxDuration, zoom })
     set({ zoom })

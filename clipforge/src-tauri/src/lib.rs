@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::Write;
 use nokhwa::pixel_format::RgbFormat;
@@ -7,6 +7,7 @@ use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
+use tauri::Manager;
 
 pub mod utils;
 
@@ -132,9 +133,9 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
         .and_then(|s| s.parse::<u64>().ok());
 
     // Get app data directory and create clips subdirectory
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
     let clips_dir = app_data_dir.join("clips");
     fs::create_dir_all(&clips_dir)
         .map_err(|e| format!("Failed to create clips directory: {}", e))?;
@@ -156,10 +157,13 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
         .to_string();
 
     // Generate thumbnail automatically
-    let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), app_handle) {
-        Ok(path) => Some(path),
+    let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), duration, app_handle.clone()) {
+        Ok(path) => {
+            println!("Successfully generated thumbnail: {}", path);
+            Some(path)
+        },
         Err(e) => {
-            eprintln!("Warning: Failed to generate thumbnail: {}", e);
+            eprintln!("Warning: Failed to generate thumbnail for {}: {}", file_path, e);
             None  // Continue even if thumbnail generation fails
         }
     };
@@ -181,6 +185,7 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
 #[tauri::command]
 fn generate_thumbnail(
     file_path: String,
+    duration: f64,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Validate input file exists
@@ -190,10 +195,11 @@ fn generate_thumbnail(
     }
 
     // Get app data directory and create thumbnails subdirectory
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
     let thumbnails_dir = app_data_dir.join("clips").join("thumbnails");
+    println!("Creating thumbnails directory: {}", thumbnails_dir.display());
     fs::create_dir_all(&thumbnails_dir)
         .map_err(|e| format!("Failed to create thumbnails directory: {}", e))?;
 
@@ -205,20 +211,152 @@ fn generate_thumbnail(
     let thumbnail_name = format!("{}_thumb.jpg", file_name);
     let thumbnail_path = thumbnails_dir.join(&thumbnail_name);
 
-    // Use builder for thumbnail generation (sync since it's quick)
-    let result = utils::ffmpeg::FfmpegBuilder::new()
-        .input(&file_path)
-        .thumbnail(1.0)
-        .scale(320, None)
-        .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
-        .run_sync();
+    // Try multiple time positions for thumbnail extraction (more robust)
+    let time_positions = [
+        1.0,  // Try 1 second first
+        duration * 0.1,  // Try 10% into the video
+        0.5,  // Try 0.5 seconds
+        0.0,  // Try beginning as last resort
+    ];
 
-    match result {
-        Ok(_) => Ok(thumbnail_path.to_str()
-            .ok_or("Invalid thumbnail path")?
-            .to_string()),
-        Err(e) => Err(e.to_string()),
+    println!("Generating thumbnail for video: {} (duration: {:.2}s)", file_path, duration);
+    println!("Thumbnail output path: {}", thumbnail_path.display());
+
+    let mut last_error = String::new();
+
+    for &time_pos in &time_positions {
+        // Skip if time position is beyond video duration
+        if time_pos >= duration && duration > 0.0 {
+            println!("Skipping time position {:.2}s (beyond duration)", time_pos);
+            continue;
+        }
+
+        println!("Trying thumbnail extraction at {:.2}s", time_pos);
+
+        let result = utils::ffmpeg::FfmpegBuilder::new()
+            .input(&file_path)
+            .thumbnail(time_pos)
+            .scale(320, None)
+            .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
+            .run_sync();
+
+        match result {
+            Ok(_) => {
+                // Verify thumbnail was actually created
+                if thumbnail_path.exists() {
+                    let metadata = thumbnail_path.metadata().map_err(|e| format!("Failed to get thumbnail metadata: {}", e))?;
+                    println!("Successfully generated thumbnail: {} (size: {} bytes)", thumbnail_path.display(), metadata.len());
+                    return Ok(thumbnail_path.to_str()
+                        .ok_or("Invalid thumbnail path")?
+                        .to_string());
+                } else {
+                    last_error = "Thumbnail file was not created".to_string();
+                    println!("Thumbnail file not found at expected path");
+                    continue;
+                }
+            }
+            Err(e) => {
+                last_error = format!("FFmpeg error at {:.2}s: {}", time_pos, e);
+                println!("Failed at {:.2}s: {}", time_pos, e);
+                continue;
+            }
+        }
     }
+
+    Err(format!("Failed to generate thumbnail after trying multiple time positions: {}", last_error))
+}
+
+#[tauri::command]
+async fn regenerate_thumbnails(app_handle: tauri::AppHandle) -> Result<(), String> {
+    // Get app data directory
+    let app_data_dir = app_handle.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+
+    let clips_dir = app_data_dir.join("clips");
+
+    if !clips_dir.exists() {
+        return Err("No clips directory found".to_string());
+    }
+
+    // Find all video files in clips directory
+    let mut video_files = Vec::new();
+
+    fn find_video_files(dir: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
+        if dir.is_dir() {
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    find_video_files(&path, files)?;
+                } else if let Some(ext) = path.extension() {
+                    let ext_str = ext.to_str().unwrap_or("").to_lowercase();
+                    if ext_str == "mp4" || ext_str == "mov" || ext_str == "webm" || ext_str == "avi" {
+                        files.push(path);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    find_video_files(&clips_dir, &mut video_files)
+        .map_err(|e| format!("Failed to scan clips directory: {}", e))?;
+
+    let mut success_count = 0;
+    let mut error_count = 0;
+
+    for video_path in video_files {
+        // Skip if thumbnail already exists
+        let file_name = video_path.file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or("Invalid video filename")?;
+        let thumbnail_name = format!("{}_thumb.jpg", file_name);
+        let thumbnails_dir = clips_dir.join("thumbnails");
+        let thumbnail_path = thumbnails_dir.join(&thumbnail_name);
+
+        if thumbnail_path.exists() {
+            println!("Thumbnail already exists for: {}", video_path.display());
+            continue;
+        }
+
+        // Get video duration first
+        let output = utils::ffmpeg::execute_ffprobe(
+            &app_handle,
+            &[
+                "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=duration",
+                "-of", "json",
+                &video_path.to_str().unwrap_or("")
+            ]
+        ).map_err(|e| format!("Failed to get duration for {}: {}", video_path.display(), e))?;
+
+        let stdout_str = String::from_utf8_lossy(&output.stdout);
+        let metadata_json: serde_json::Value = serde_json::from_str(&stdout_str)
+            .map_err(|e| format!("Failed to parse metadata for {}: {}", video_path.display(), e))?;
+
+        let duration = metadata_json["streams"]
+            .get(0)
+            .and_then(|s| s["duration"].as_str())
+            .and_then(|d| d.parse::<f64>().ok())
+            .unwrap_or(0.0);
+
+        // Generate thumbnail
+        match generate_thumbnail(video_path.to_str().unwrap_or("").to_string(), duration, app_handle.clone()) {
+            Ok(path) => {
+                println!("Generated thumbnail for: {} -> {}", video_path.display(), path);
+                success_count += 1;
+            }
+            Err(e) => {
+                eprintln!("Failed to generate thumbnail for {}: {}", video_path.display(), e);
+                error_count += 1;
+            }
+        }
+    }
+
+    println!("Thumbnail regeneration complete: {} generated, {} failed", success_count, error_count);
+    Ok(())
 }
 
 #[tauri::command]
@@ -275,9 +413,9 @@ async fn save_recording(
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Get app data directory and create clips subdirectory
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
     let clips_dir = app_data_dir.join("clips");
     fs::create_dir_all(&clips_dir)
         .map_err(|e| format!("Failed to create clips directory: {}", e))?;
@@ -422,9 +560,9 @@ async fn export_multi_clips(
     app_handle: &tauri::AppHandle,
 ) -> Result<String, String> {
     // Get app data directory for temp files
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     // Calculate total duration for progress
     let total_duration: f64 = clips.iter().map(|c| c.trim_end - c.trim_start).sum();
@@ -521,9 +659,9 @@ async fn record_webcam_clip(
         .map_err(|e| format!("Failed to open camera stream: {}", e))?;
 
     // Get app data directory for temp raw frames file
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     let temp_raw_path = app_data_dir.join("temp_webcam_raw.rgb");
 
@@ -598,9 +736,9 @@ async fn record_webcam_clip(
 
 #[tauri::command]
 async fn save_workspace(state_json: String, app_handle: tauri::AppHandle) -> Result<(), String> {
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     let workspace_path = app_data_dir.join("workspace.json");
 
@@ -612,9 +750,9 @@ async fn save_workspace(state_json: String, app_handle: tauri::AppHandle) -> Res
 
 #[tauri::command]
 async fn load_workspace(app_handle: tauri::AppHandle) -> Result<String, String> {
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     let workspace_path = app_data_dir.join("workspace.json");
 
@@ -630,9 +768,9 @@ async fn load_workspace(app_handle: tauri::AppHandle) -> Result<String, String> 
 
 #[tauri::command]
 async fn list_clips(app_handle: tauri::AppHandle) -> Result<Vec<ClipInfo>, String> {
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     let clips_dir = app_data_dir.join("clips");
 
@@ -691,9 +829,9 @@ async fn delete_clip(file_path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn reset_workspace(app_handle: tauri::AppHandle) -> Result<(), String> {
-    let app_data_dir = app_handle.path_resolver()
+    let app_data_dir = app_handle.path()
         .app_data_dir()
-        .ok_or("Failed to get app data directory")?;
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
     let clips_dir = app_data_dir.join("clips");
     let workspace_file = app_data_dir.join("workspace.json");
@@ -753,7 +891,7 @@ pub fn run() {
   }
 
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
+    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, regenerate_thumbnails, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

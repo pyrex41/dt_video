@@ -134,7 +134,7 @@ function App() {
           </div>
         </div>
 
-        <div className="border-t border-zinc-700">
+        <div className="w-full border-t border-zinc-700">
           <Timeline />
         </div>
 

@@ -6,7 +6,10 @@
       "Bash(task-master complexity-report:*)",
       "Bash(task-master validate-dependencies:*)",
       "Bash(cargo check:*)",
-      "Bash(cargo doc:*)"
+      "Bash(cargo doc:*)",
+      "Bash(cargo test:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
