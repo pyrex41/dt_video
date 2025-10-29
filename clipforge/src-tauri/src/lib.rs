@@ -1,9 +1,8 @@
-use tauri::api::process::Command;
+use tauri::Manager;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::fs;
 use std::io::Write;
-use std::io::{BufRead, BufReader};
 use std::process::Stdio;
 use tokio::process::Command;
 use tokio::io::{AsyncBufReadExt, BufReader as AsyncBufReader};
@@ -491,12 +490,17 @@ async fn export_single_clip(
     // Calculate total duration for progress calculation
     let duration = clip.trim_end - clip.trim_start;
 
+    // Create string bindings to extend lifetime
+    let trim_start_str = clip.trim_start.to_string();
+    let duration_str = duration.to_string();
+    let scale_filter = format!("scale={}:{}", width, height);
+
     // Run FFmpeg with progress monitoring and trim
     let args = vec![
-        "-ss", &clip.trim_start.to_string(),
-        "-t", &duration.to_string(),
+        "-ss", trim_start_str.as_str(),
+        "-t", duration_str.as_str(),
         "-i", &clip.path,
-        "-vf", &format!("scale={}:{}", width, height),
+        "-vf", scale_filter.as_str(),
         "-c:v", "libx264",
         "-preset", "medium",
         "-crf", "23",
@@ -542,20 +546,26 @@ async fn export_multi_clips(
         let temp_output = app_data_dir.join(format!("temp_clip_{}.mp4", i));
         let duration = clip.trim_end - clip.trim_start;
 
+        // Create string bindings to extend lifetime
+        let trim_start_str = clip.trim_start.to_string();
+        let duration_str = duration.to_string();
+        let scale_filter = format!("scale={}:{}", width, height);
+        let temp_output_str = temp_output.to_str().ok_or("Invalid temp path")?.to_string();
+
         // Trim and scale each clip individually (no progress for individual clips)
         let output = Command::new("ffmpeg")
             .args(&[
-                "-ss", &clip.trim_start.to_string(),
-                "-t", &duration.to_string(),
+                "-ss", trim_start_str.as_str(),
+                "-t", duration_str.as_str(),
                 "-i", &clip.path,
-                "-vf", &format!("scale={}:{}", width, height),
+                "-vf", scale_filter.as_str(),
                 "-c:v", "libx264",
                 "-preset", "medium",
                 "-crf", "23",
                 "-c:a", "aac",
                 "-b:a", "128k",
                 "-y",
-                &temp_output.to_str().ok_or("Invalid temp path")?
+                temp_output_str.as_str()
             ])
             .output()
             .await
@@ -602,58 +612,6 @@ async fn export_multi_clips(
         let _ = fs::remove_file(temp_path);
     }
     let _ = fs::remove_file(&concat_list_path);
-
-    // Verify output file
-    let output_file = Path::new(output_path);
-    if !output_file.exists() {
-        return Err("Output file was not created".to_string());
-    }
-
-    Ok(output_path.to_string())
-}
-
-        trimmed_clip_paths.push(temp_output);
-    }
-
-    // Create concat list file
-    let concat_list_path = app_data_dir.join("concat_list.txt");
-    let mut concat_file = fs::File::create(&concat_list_path)
-        .map_err(|e| format!("Failed to create concat list file: {}", e))?;
-
-    // Write concat demuxer format with trimmed clips
-    for temp_path in &trimmed_clip_paths {
-        writeln!(concat_file, "file '{}'", temp_path.to_str().ok_or("Invalid path")?)
-            .map_err(|e| format!("Failed to write to concat list: {}", e))?;
-    }
-
-    // Flush to ensure file is written
-    concat_file.flush()
-        .map_err(|e| format!("Failed to flush concat list: {}", e))?;
-    drop(concat_file); // Close file
-
-    // Run FFmpeg with concat demuxer (no need to scale again, already done)
-    let output = Command::new_sidecar("ffmpeg")
-        .expect("failed to create ffmpeg command")
-        .args(&[
-            "-f", "concat",
-            "-safe", "0",
-            "-i", concat_list_path.to_str().ok_or("Invalid concat list path")?,
-            "-c", "copy", // Stream copy since clips are already processed
-            "-y",
-            output_path
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run ffmpeg concat: {}", e))?;
-
-    // Clean up temp files
-    let _ = fs::remove_file(&concat_list_path);
-    for temp_path in &trimmed_clip_paths {
-        let _ = fs::remove_file(temp_path);
-    }
-
-    if !output.status.success() {
-        return Err(format!("FFmpeg concat failed: {}", output.stderr));
-    }
 
     // Verify output file
     let output_file = Path::new(output_path);
