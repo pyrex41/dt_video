@@ -268,10 +268,11 @@ export function Preview() {
     >
       {currentClip ? (
         <div className="w-full h-full flex items-center justify-center p-6">
-          <div className="relative w-full h-full bg-black rounded-lg overflow-hidden shadow-xl">
+          {/* Fixed-size container with 16:9 aspect ratio (standard for most videos) */}
+          <div className="relative bg-black rounded-lg overflow-hidden shadow-xl" style={{ width: '960px', maxWidth: '90%', aspectRatio: '16/9' }}>
             <video
               ref={videoRef}
-              className="w-full h-full"
+              className="w-full h-full object-contain"
               playsInline
             />
           </div>

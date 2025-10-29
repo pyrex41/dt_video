@@ -157,7 +157,7 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
         .to_string();
 
     // Generate thumbnail automatically
-    let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), duration, app_handle.clone()) {
+    let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), duration, width, height, app_handle.clone()) {
         Ok(path) => {
             println!("Successfully generated thumbnail: {}", path);
             Some(path)
@@ -186,6 +186,8 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
 fn generate_thumbnail(
     file_path: String,
     duration: f64,
+    width: u32,
+    height: u32,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     // Validate input file exists
@@ -233,12 +235,25 @@ fn generate_thumbnail(
 
         println!("Trying thumbnail extraction at {:.2}s", time_pos);
 
+        // Calculate thumbnail dimensions maintaining aspect ratio
+        let aspect_ratio = width as f32 / height as f32;
+        let (thumb_width, thumb_height) = if aspect_ratio > 1.0 {
+            // Landscape video - fit width to 320px, scale height
+            let scaled_height = (320.0 / aspect_ratio) as u32;
+            (320, scaled_height)
+        } else {
+            // Portrait or square video - fit height to 180px, scale width
+            let scaled_width = (180.0 * aspect_ratio) as u32;
+            (scaled_width, 180)
+        };
+
+        println!("Video dimensions: {}x{}, aspect ratio: {:.2}, thumbnail: {}x{}",
+                 width, height, aspect_ratio, thumb_width, thumb_height);
+
         let result = utils::ffmpeg::FfmpegBuilder::new()
             .input(&file_path)
             .thumbnail(time_pos)
-            // Crop to 16:9 aspect ratio (320x180) from center
-            .crop(320, 180, None, None)
-            .scale(320, Some(180))
+            .scale(thumb_width, Some(thumb_height))
             .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
             .with_app_handle(app_handle.clone())
             .run_sync();
@@ -323,30 +338,36 @@ async fn regenerate_thumbnails(app_handle: tauri::AppHandle) -> Result<(), Strin
             continue;
         }
 
-        // Get video duration first
+        // Get video metadata (duration, width, height)
         let output = utils::ffmpeg::execute_ffprobe(
             &app_handle,
             &[
                 "-v", "error",
                 "-select_streams", "v:0",
-                "-show_entries", "stream=duration",
+                "-show_entries", "stream=width,height,duration",
                 "-of", "json",
                 &video_path.to_str().unwrap_or("")
             ]
-        ).map_err(|e| format!("Failed to get duration for {}: {}", video_path.display(), e))?;
+        ).map_err(|e| format!("Failed to get metadata for {}: {}", video_path.display(), e))?;
 
         let stdout_str = String::from_utf8_lossy(&output.stdout);
         let metadata_json: serde_json::Value = serde_json::from_str(&stdout_str)
             .map_err(|e| format!("Failed to parse metadata for {}: {}", video_path.display(), e))?;
 
-        let duration = metadata_json["streams"]
+        let stream = metadata_json["streams"]
             .get(0)
-            .and_then(|s| s["duration"].as_str())
-            .and_then(|d| d.parse::<f64>().ok())
+            .ok_or_else(|| format!("No video stream found for {}", video_path.display()))?;
+
+        let width = stream["width"].as_u64()
+            .ok_or_else(|| format!("Missing width for {}", video_path.display()))? as u32;
+        let height = stream["height"].as_u64()
+            .ok_or_else(|| format!("Missing height for {}", video_path.display()))? as u32;
+        let duration = stream["duration"].as_str()
+            .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(0.0);
 
         // Generate thumbnail
-        match generate_thumbnail(video_path.to_str().unwrap_or("").to_string(), duration, app_handle.clone()) {
+        match generate_thumbnail(video_path.to_str().unwrap_or("").to_string(), duration, width, height, app_handle.clone()) {
             Ok(path) => {
                 println!("Generated thumbnail for: {} -> {}", video_path.display(), path);
                 success_count += 1;
