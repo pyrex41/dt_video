@@ -47,6 +47,8 @@ export function Timeline() {
     const canvas = fabricCanvasRef.current
     if (!canvas) return
 
+    // Remove all event listeners to prevent memory leaks
+    canvas.off()
     canvas.clear()
     canvas.backgroundColor = "#18181b" // zinc-900
 

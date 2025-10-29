@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { invoke } from "../lib/tauri-mock"
+import { invoke } from "@tauri-apps/api/core"
 import { Button } from "./ui/button"
 import { Video, Monitor } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
@@ -48,15 +48,29 @@ export function RecordButton() {
   }
 
   const handleScreenRecord = async () => {
+    let stream: MediaStream | null = null
+    let recorder: MediaRecorder | null = null
+    let recordingTimeout: NodeJS.Timeout | null = null
+    let safetyTimeout: NodeJS.Timeout | null = null
+
+    // Safety mechanism: Force reset state after 15 seconds
+    safetyTimeout = setTimeout(() => {
+      console.warn("[v0] Screen recording safety timeout triggered - resetting state")
+      setIsRecording(false)
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop())
+      }
+    }, 15000)
+
     try {
       setIsRecording(true)
       setError(null)
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      stream = await navigator.mediaDevices.getDisplayMedia({
         video: { mediaSource: "screen" } as MediaTrackConstraints,
       })
 
-      const recorder = new MediaRecorder(stream, {
+      recorder = new MediaRecorder(stream, {
         mimeType: "video/webm;codecs=vp8",
       })
 
@@ -69,45 +83,81 @@ export function RecordButton() {
       }
 
       recorder.onstop = async () => {
-        const blob = new Blob(chunks, { type: "video/webm" })
-        const arrayBuffer = await blob.arrayBuffer()
-        const data = Array.from(new Uint8Array(arrayBuffer))
+        try {
+          if (safetyTimeout) clearTimeout(safetyTimeout)
 
-        const outputPath = `clips/screen_${Date.now()}.webm`
+          const blob = new Blob(chunks, { type: "video/webm" })
+          const arrayBuffer = await blob.arrayBuffer()
+          const data = Array.from(new Uint8Array(arrayBuffer))
 
-        await invoke("save_recording", {
-          path: outputPath,
-          data,
-        })
+          const outputPath = `clips/screen_${Date.now()}.webm`
 
-        const duration = 10 // Approximate duration
+          await invoke("save_recording", {
+            path: outputPath,
+            data,
+          })
 
-        const newClip: Clip = {
-          id: `clip_${Date.now()}`,
-          path: outputPath,
-          name: "Screen Recording",
-          start: clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0,
-          end: (clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0) + duration,
-          duration,
-          track: 0,
-          trimStart: 0,
-          trimEnd: duration,
+          const duration = 10 // Approximate duration
+
+          const newClip: Clip = {
+            id: `clip_${Date.now()}`,
+            path: outputPath,
+            name: "Screen Recording",
+            start: clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0,
+            end: (clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0) + duration,
+            duration,
+            track: 0,
+            trimStart: 0,
+            trimEnd: duration,
+          }
+
+          addClip(newClip)
+          console.log("[v0] Screen recording added:", newClip)
+        } catch (err) {
+          setError(`Failed to save recording: ${err}`)
+          console.error("[v0] Recording save error:", err)
+        } finally {
+          setIsRecording(false)
         }
+      }
 
-        addClip(newClip)
-        console.log("[v0] Screen recording added:", newClip)
+      // Handle user canceling the screen share dialog
+      stream.getTracks().forEach((track) => {
+        track.onended = () => {
+          console.log("[v0] Screen track ended - cleaning up")
+          if (recordingTimeout) clearTimeout(recordingTimeout)
+          if (safetyTimeout) clearTimeout(safetyTimeout)
+          if (recorder && recorder.state !== "inactive") {
+            recorder.stop()
+          } else {
+            // If recorder never started, reset state immediately
+            setIsRecording(false)
+          }
+        }
+      })
+
+      recorder.onerror = (e) => {
+        console.error("[v0] MediaRecorder error:", e)
+        setError("Recording error occurred")
+        if (safetyTimeout) clearTimeout(safetyTimeout)
         setIsRecording(false)
       }
 
       recorder.start()
-      setTimeout(() => {
-        recorder.stop()
-        stream.getTracks().forEach((track) => track.stop())
+      recordingTimeout = setTimeout(() => {
+        if (recorder && recorder.state !== "inactive") {
+          recorder.stop()
+        }
+        stream?.getTracks().forEach((track) => track.stop())
       }, 10000) // 10 seconds
     } catch (err) {
       setError(`Failed to record screen: ${err}`)
       console.error("[v0] Screen recording error:", err)
+      if (safetyTimeout) clearTimeout(safetyTimeout)
       setIsRecording(false)
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop())
+      }
     }
   }
 

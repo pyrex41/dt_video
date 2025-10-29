@@ -10,8 +10,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "preact": "^10.24.3",
     "@tauri-apps/api": "latest",
+    "@tauri-apps/plugin-dialog": "^2.4.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "fabric": "latest",
@@ -23,6 +23,7 @@
     "path": "latest",
     "plyr": "latest",
     "plyr-react": "^5.3.0",
+    "preact": "^10.24.3",
     "react": "^18.3.1",
     "react-dom": "latest",
     "sass": "latest",
@@ -43,7 +44,6 @@
     "@types/node": "^22",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
-    
     "autoprefixer": "^10.4.18",
     "postcss": "^8.5",
     "tailwindcss": "^3.4.17",

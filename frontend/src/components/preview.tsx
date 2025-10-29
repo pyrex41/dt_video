@@ -22,10 +22,8 @@ export function Preview() {
     const player = playerRef.current
 
     player.on("timeupdate", () => {
-      if (currentClip) {
-        const clipTime = player.currentTime + currentClip.start
-        setPlayhead(clipTime)
-      }
+      // Don't update playhead during timeupdate to avoid infinite loops
+      // The playhead is controlled by the parent state
     })
 
     player.on("play", () => setIsPlaying(true))
@@ -34,7 +32,7 @@ export function Preview() {
     return () => {
       player.destroy()
     }
-  }, [])
+  }, [setIsPlaying])
 
   useEffect(() => {
     if (!playerRef.current || !currentClip) return

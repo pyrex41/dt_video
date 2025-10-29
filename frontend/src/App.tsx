@@ -1,14 +1,14 @@
 "use client"
 
 import { useEffect } from "react"
-import { invoke, isTauri } from "./lib/tauri-mock"
+import { invoke } from "@tauri-apps/api/core"
 import { Header } from "./components/header"
 import { Timeline } from "./components/timeline"
 import { Preview } from "./components/preview"
 import { Controls } from "./components/controls"
 import { useClipStore } from "./store/use-clip-store"
 import { Alert, AlertDescription } from "./components/ui/alert"
-import { AlertCircle, Info } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 
 function App() {
   const { error, setError } = useClipStore()
@@ -30,14 +30,6 @@ function App() {
     <div className="flex h-screen flex-col bg-background">
       <Header />
 
-      {!isTauri && (
-        <Alert className="m-4 border-zinc-700 bg-zinc-800">
-          <Info className="h-4 w-4" />
-          <AlertDescription className="text-zinc-300">
-            Preview Mode: Running in browser with mock data. Build with Tauri for full functionality.
-          </AlertDescription>
-        </Alert>
-      )}
 
       {error && (
         <Alert variant="destructive" className="m-4">
