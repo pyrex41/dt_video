@@ -325,7 +325,7 @@ export function Timeline() {
       trimmedRect.on("mousedown", () => {
         isDraggingRef.current = true
         setSelectedClip(clip.id)
-        setPlayhead(clip.start + clip.trimStart) // Move playhead to trim start
+        console.log('[Timeline] Clip clicked, setting selected clip:', clip.id, clip.name)
       })
 
       trimmedRect.on("moving", (e) => {

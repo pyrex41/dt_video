@@ -236,7 +236,9 @@ fn generate_thumbnail(
         let result = utils::ffmpeg::FfmpegBuilder::new()
             .input(&file_path)
             .thumbnail(time_pos)
-            .scale(320, None)
+            // Crop to 16:9 aspect ratio (320x180) from center
+            .crop(320, 180, None, None)
+            .scale(320, Some(180))
             .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
             .with_app_handle(app_handle.clone())
             .run_sync();

@@ -39,6 +39,10 @@ pub struct FfmpegBuilder {
     trim_duration: Option<f64>,
     scale_width: Option<u32>,
     scale_height: Option<u32>,
+    crop_width: Option<u32>,
+    crop_height: Option<u32>,
+    crop_x: Option<u32>,
+    crop_y: Option<u32>,
     video_codec: Option<String>,
     audio_codec: Option<String>,
     preset: Option<String>,
@@ -96,6 +100,16 @@ impl FfmpegBuilder {
     pub fn scale_even(mut self) -> Self {
         self.scale_width = Some(0); // Special marker for even scaling
         self.scale_height = None;
+        self
+    }
+
+    /// Set cropping parameters (width, height, x offset, y offset)
+    /// If x and y are None, crop will be centered
+    pub fn crop(mut self, width: u32, height: u32, x: Option<u32>, y: Option<u32>) -> Self {
+        self.crop_width = Some(width);
+        self.crop_height = Some(height);
+        self.crop_x = x;
+        self.crop_y = y;
         self
     }
 
@@ -197,6 +211,18 @@ impl FfmpegBuilder {
 
         // Video filters
         let mut filters = Vec::new();
+
+        // Apply crop filter first (before scaling)
+        if let (Some(cw), Some(ch)) = (self.crop_width, self.crop_height) {
+            let crop_str = if let (Some(x), Some(y)) = (self.crop_x, self.crop_y) {
+                format!("crop={}:{}:{}:{}", cw, ch, x, y)
+            } else {
+                // Center crop using FFmpeg expressions
+                format!("crop={}:{}:(iw-{})/2:(ih-{})/2", cw, ch, cw, ch)
+            };
+            filters.push(crop_str);
+        }
+
         if let Some(w) = self.scale_width {
             if w == 0 {
                 // Special case: even dimensions scaling

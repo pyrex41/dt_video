@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-// @ts-ignore
+import { useEffect, useRef, useState, useMemo } from "react"
 import Plyr from "plyr"
 import "plyr/dist/plyr.css"
 import { convertFileSrc } from "@tauri-apps/api/core"
@@ -12,65 +11,64 @@ export function Preview() {
   const playerRef = useRef<Plyr | null>(null)
   const isUpdatingFromPlayer = useRef(false)
   const isUpdatingPlayState = useRef(false)
-  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
-  const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip } = useClipStore()
+  const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip, selectedClipId } = useClipStore()
 
-  // Find all clips at current playhead position, prioritize lowest track number (track 0 is top)
-  const clipsAtPlayhead = clips.filter((clip) => playhead >= clip.start && playhead < clip.end)
-  const currentClip = clipsAtPlayhead.sort((a, b) => a.track - b.track)[0]
+  // If a clip is selected (clicked in timeline), use that clip
+  // Otherwise, find clips at playhead and prioritize lowest track number (track 0 = top)
+  const currentClip = useMemo(() => {
+    if (selectedClipId) {
+      const clip = clips.find(c => c.id === selectedClipId)
+      console.log('[ClipForge] Using selected clip:', clip?.name, 'on track', clip?.track)
+      return clip
+    } else {
+      const clipsAtPlayhead = clips.filter((clip) => playhead >= clip.start && playhead < clip.end)
+      const clip = clipsAtPlayhead.sort((a, b) => a.track - b.track)[0]
+
+      if (clipsAtPlayhead.length > 0) {
+        console.log('[ClipForge] Clips at playhead', playhead, ':', clipsAtPlayhead.map(c => ({
+          name: c.name,
+          track: c.track,
+          start: c.start,
+          end: c.end
+        })))
+        console.log('[ClipForge] Auto-selected clip:', clip?.name, 'on track', clip?.track)
+      }
+      return clip
+    }
+  }, [selectedClipId, clips, playhead])
 
   // Audio settings
   const volume = currentClip?.volume ?? 1
   const muted = currentClip?.muted ?? false
 
-  // Destroy and recreate Plyr whenever clip changes
+  // Initialize Plyr once on mount
   useEffect(() => {
-    if (!videoRef.current || !currentClip) return
+    if (!videoRef.current) return
 
-    const video = videoRef.current
-
-    // STEP 1: Destroy old player if it exists
-    if (playerRef.current) {
-      console.log('[ClipForge] Destroying old Plyr instance')
-      try {
-        playerRef.current.destroy()
-      } catch (e) {
-        console.error('[ClipForge] Error destroying player:', e)
-      }
-      playerRef.current = null
-    }
-
-    // STEP 2: Remove ALL orphaned Plyr DOM elements
-    document.querySelectorAll('.plyr').forEach((el) => el.remove())
-
-    // STEP 3: Set video source
-    const convertedSrc = convertFileSrc(currentClip.path)
-    console.log('[ClipForge] Converting video path:', currentClip.path, '→', convertedSrc)
-    video.src = convertedSrc
-
-    // STEP 4: Create fresh player
-    console.log('[ClipForge] Creating new Plyr instance for clip:', currentClip.id)
-    const player = new Plyr(video, {
+    console.log('[ClipForge] Initializing Plyr player')
+    const player = new Plyr(videoRef.current, {
       controls: ["play", "progress", "current-time", "mute", "volume", "fullscreen"],
       keyboard: { focused: true, global: true },
     })
+
     playerRef.current = player
 
     // Set up event listeners
     player.on("timeupdate", () => {
-      if (!isUpdatingFromPlayer.current) {
+      if (!isUpdatingFromPlayer.current && currentClip) {
+        const currentTime = player.currentTime
+
         // Constrain playback to trim bounds
-        if (player.currentTime < currentClip.trimStart) {
+        if (currentTime < currentClip.trimStart) {
           player.currentTime = currentClip.trimStart
-        } else if (player.currentTime > currentClip.trimEnd) {
+        } else if (currentTime > currentClip.trimEnd) {
           player.currentTime = currentClip.trimStart
           player.pause()
         }
 
         isUpdatingFromPlayer.current = true
-        const clipTime = player.currentTime + currentClip.start
+        const clipTime = currentTime + currentClip.start
         setPlayhead(clipTime)
         setTimeout(() => {
           isUpdatingFromPlayer.current = false
@@ -99,40 +97,72 @@ export function Preview() {
       setIsPlaying(false)
     })
 
-    // Apply settings
-    player.volume = volume
-    player.muted = muted
-
-    // Seek to position
-    let clipLocalTime = playhead - currentClip.start
-    clipLocalTime = Math.max(currentClip.trimStart, Math.min(currentClip.trimEnd, clipLocalTime))
-    if (clipLocalTime >= 0 && clipLocalTime <= currentClip.duration) {
-      player.currentTime = clipLocalTime
-    }
-
-    // Resume playback if needed
-    if (isPlaying) {
-      player.play()
-    }
-
     return () => {
-      // Cleanup on unmount or clip change
+      console.log('[ClipForge] Cleaning up Plyr player')
       if (playerRef.current) {
         playerRef.current.destroy()
         playerRef.current = null
       }
     }
-  }, [currentClip?.id]) // Recreate whenever clip changes
+  }, []) // Only run once on mount
+
+  // Update source when clip changes using Plyr's source API
+  useEffect(() => {
+    if (!playerRef.current || !currentClip) return
+
+    const player = playerRef.current
+    const convertedSrc = convertFileSrc(currentClip.path)
+    console.log('[ClipForge] Setting Plyr source:', currentClip.path, '→', convertedSrc)
+
+    // Use Plyr's source API to change the video
+    player.source = {
+      type: 'video',
+      sources: [{
+        src: convertedSrc,
+        type: 'video/mp4'
+      }]
+    }
+
+    // Apply audio settings
+    player.volume = volume
+    player.muted = muted
+
+    // The playhead sync effect (below) will handle seeking once the video is ready
+    console.log('[ClipForge] Source set, waiting for metadata to load...')
+  }, [currentClip?.id, volume, muted]) // Re-run when clip ID or audio settings change
 
   // Apply audio settings when they change
   useEffect(() => {
     if (!playerRef.current) return
-
     const player = playerRef.current
     player.volume = volume
     player.muted = muted
   }, [volume, muted])
 
+  // When a clip is selected, jump playhead to that clip's start if not already in bounds
+  // Also clear selection if playhead moves outside the selected clip
+  useEffect(() => {
+    if (!selectedClipId || !currentClip) return
+
+    // Check if this is a new selection (selectedClipId just changed)
+    // vs playhead moved while a clip was already selected
+  }, [selectedClipId]) // Only run when selectedClipId changes
+
+  // Clear clip selection when playhead moves outside the selected clip's bounds
+  useEffect(() => {
+    const { setSelectedClip } = useClipStore.getState()
+
+    if (!selectedClipId || !currentClip) return
+
+    // If playhead is outside the selected clip's bounds, clear the selection
+    // This allows the auto-selection logic to pick the correct clip at the playhead
+    if (playhead < currentClip.start || playhead >= currentClip.end) {
+      console.log('[ClipForge] Playhead moved outside selected clip bounds, clearing selection')
+      setSelectedClip(null)
+    }
+  }, [playhead, selectedClipId, currentClip])
+
+  // Sync playhead and play/pause state
   useEffect(() => {
     if (!playerRef.current || !currentClip || isUpdatingFromPlayer.current) return
 
@@ -142,13 +172,28 @@ export function Preview() {
     // Constrain to trim bounds
     clipLocalTime = Math.max(currentClip.trimStart, Math.min(currentClip.trimEnd, clipLocalTime))
 
-    // Update video time if loaded
-    if (videoRef.current && videoRef.current.readyState >= 2) {
-      // Always sync when trim positions change or when there's a significant playhead difference
+    // Update video time if loaded OR wait for it to load
+    const syncTime = () => {
       const timeDiff = Math.abs(player.currentTime - clipLocalTime)
       if (timeDiff > 0.1) {
         console.log('[ClipForge] Syncing playhead to:', clipLocalTime, 'for clip:', currentClip.id, 'trim:', currentClip.trimStart, '-', currentClip.trimEnd)
         player.currentTime = clipLocalTime
+      }
+    }
+
+    if (videoRef.current && videoRef.current.readyState >= 2) {
+      // Video is already loaded, sync immediately
+      syncTime()
+    } else {
+      // Video not loaded yet, wait for loadedmetadata event
+      const handleLoadedMetadata = () => {
+        console.log('[ClipForge] Metadata loaded, syncing playhead to:', clipLocalTime)
+        syncTime()
+      }
+      videoRef.current?.addEventListener('loadedmetadata', handleLoadedMetadata)
+
+      return () => {
+        videoRef.current?.removeEventListener('loadedmetadata', handleLoadedMetadata)
       }
     }
 
@@ -168,14 +213,10 @@ export function Preview() {
         isUpdatingPlayState.current = true
         console.log('[ClipForge] Pausing playback')
         player.pause()
-        // Also ensure the underlying video element is paused
-        if (player.media) {
-          player.media.pause()
-        }
         setTimeout(() => { isUpdatingPlayState.current = false }, 100)
       }
     }
-  }, [playhead, isPlaying, currentClip?.id, currentClip?.trimStart, currentClip?.trimEnd])
+  }, [playhead, isPlaying, currentClip?.id, currentClip?.trimStart, currentClip?.trimEnd, setIsPlaying])
 
   // Handle drop from media library
   const handleDrop = (e: React.DragEvent) => {
@@ -228,14 +269,9 @@ export function Preview() {
       {currentClip ? (
         <div className="w-full h-full flex items-center justify-center p-6">
           <div className="relative w-full h-full bg-black rounded-lg overflow-hidden shadow-xl">
-            {isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
-                <div className="text-white text-sm">Loading...</div>
-              </div>
-            )}
             <video
               ref={videoRef}
-              className="w-full h-full object-contain"
+              className="w-full h-full"
               playsInline
             />
           </div>
