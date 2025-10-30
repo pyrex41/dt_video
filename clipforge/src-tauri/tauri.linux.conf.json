@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "resources": [
+      "binaries/ffmpeg-x86_64-unknown-linux-gnu",
+      "binaries/ffprobe-x86_64-unknown-linux-gnu"
+    ]
+  }
+}

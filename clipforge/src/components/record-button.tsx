@@ -104,6 +104,13 @@ export function RecordButton() {
   }
 
   const handleWebcamRecord = async () => {
+    // Prevent starting new recording while processing
+    if (isProcessing) {
+      console.warn("[ClipForge] Cannot start recording: processing in progress")
+      setError("Please wait for the current recording to finish processing")
+      return
+    }
+
     try {
       console.log("[ClipForge] Starting webcam recording...")
       setIsRecording(true)
@@ -290,6 +297,13 @@ export function RecordButton() {
   }
 
   const handleScreenRecord = async () => {
+    // Prevent starting new recording while processing
+    if (isProcessing) {
+      console.warn("[ClipForge] Cannot start recording: processing in progress")
+      setError("Please wait for the current recording to finish processing")
+      return
+    }
+
     try {
       console.log("[ClipForge] Starting screen recording...")
       setIsRecording(true)
@@ -541,6 +555,13 @@ export function RecordButton() {
   }
 
   const handlePiPRecord = async () => {
+    // Prevent starting new recording while processing
+    if (isProcessing) {
+      console.warn("[ClipForge] Cannot start recording: processing in progress")
+      setError("Please wait for the current recording to finish processing")
+      return
+    }
+
     try {
       console.log("[ClipForge] Starting PiP recording...")
       setIsRecording(true)
@@ -903,6 +924,7 @@ export function RecordButton() {
             variant="ghost"
             size="icon"
             className="h-12 w-12 hover:bg-green-600 text-white border-2 border-green-500 hover:border-green-400 transition-all duration-200 shadow-lg"
+            disabled={isProcessing}
           >
             <Video className="h-6 w-6" />
           </Button>
@@ -913,21 +935,30 @@ export function RecordButton() {
           </div>
           <DropdownMenuItem
             onClick={handleWebcamRecord}
-            className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+            disabled={isProcessing}
+            className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 ${
+              isProcessing ? 'text-zinc-500 cursor-not-allowed' : 'text-white'
+            }`}
           >
             <Video className="h-5 w-5 text-green-400" />
             <span className="text-sm">Webcam</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handleScreenRecord}
-            className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+            disabled={isProcessing}
+            className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 ${
+              isProcessing ? 'text-zinc-500 cursor-not-allowed' : 'text-white'
+            }`}
           >
             <Monitor className="h-5 w-5 text-blue-400" />
             <span className="text-sm">Screen</span>
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={handlePiPRecord}
-            className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+            disabled={isProcessing}
+            className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 ${
+              isProcessing ? 'text-zinc-500 cursor-not-allowed' : 'text-white'
+            }`}
           >
             <PictureInPicture className="h-5 w-5 text-purple-400" />
             <span className="text-sm">PiP (Screen + Webcam)</span>

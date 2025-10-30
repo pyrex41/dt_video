@@ -90,7 +90,7 @@ export function MediaLibrary() {
 
   return (
     <div
-      className={`relative flex flex-col h-full bg-zinc-900 border-r border-zinc-700 transition-all duration-300 ${
+      className={`relative flex flex-col bg-zinc-900 border-r border-zinc-700 transition-all duration-300 ${
         isCollapsed ? "w-12" : "w-80"
       }`}
     >
@@ -163,7 +163,7 @@ export function MediaLibrary() {
           </div>
 
           {/* Clips List */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="overflow-y-auto p-4 space-y-3 max-h-[600px]">
             {clips.length === 0 ? (
               <div className="text-center text-zinc-500 py-8">
                 <Film className="h-12 w-12 mx-auto mb-2 opacity-50" />

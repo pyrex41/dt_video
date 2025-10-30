@@ -38,10 +38,7 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "resources": [
-      "binaries/ffmpeg-*",
-      "binaries/ffprobe-*"
-    ],
+    "resources": [],
     "macOS": {
       "entitlements": "Entitlements.plist",
       "minimumSystemVersion": "10.13",

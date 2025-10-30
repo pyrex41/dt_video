@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "resources": [
+      "binaries/ffmpeg-aarch64-apple-darwin",
+      "binaries/ffprobe-aarch64-apple-darwin"
+    ]
+  }
+}

@@ -129,7 +129,7 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-white p-8">
-      <div className="flex flex-col h-full bg-zinc-900 rounded-lg overflow-hidden shadow-2xl border border-zinc-800">
+      <div className="flex flex-col bg-zinc-900 rounded-lg overflow-hidden shadow-2xl border border-zinc-800">
         <Header />
 
         {error && (
@@ -139,12 +139,12 @@ function App() {
           </Alert>
         )}
 
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex overflow-hidden">
           {/* Media Library Sidebar */}
           <MediaLibrary />
 
           {/* Main Content Area */}
-          <div className="flex flex-1 flex-col min-h-0">
+          <div className="flex flex-1 flex-col">
             <div className="flex-1 flex items-center justify-center p-8 bg-zinc-800 rounded-lg mx-6 mt-4 mb-4">
               <Preview />
             </div>
