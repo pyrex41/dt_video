@@ -118,8 +118,9 @@ export function Preview() {
     const player = playerRef.current
     const convertedSrc = convertFileSrc(currentClip.path)
 
-    console.log('[ClipForge] Loading video:', currentClip.name)
+    console.log('[ClipForge] Loading video:', currentClip.name, 'from path:', currentClip.path)
 
+    // Set source and wait for it to be ready
     player.source = {
       type: 'video',
       sources: [{ src: convertedSrc, type: 'video/mp4' }]
@@ -127,7 +128,45 @@ export function Preview() {
 
     player.volume = currentClip.volume ?? 1
     player.muted = currentClip.muted ?? false
-  }, [currentClip?.id])
+
+    // Seek to the correct position once video is loaded
+    const handleLoadedMetadata = () => {
+      if (!playerRef.current || !currentClip) return
+
+      // Get current playhead position from store (not from closure)
+      const state = useClipStore.getState()
+      const currentPlayhead = state.playhead
+
+      // Calculate initial video position based on playhead
+      let timelineOffset = currentPlayhead - currentClip.start
+
+      if (currentPlayhead < currentClip.start) {
+        timelineOffset = 0
+      } else if (currentPlayhead >= currentClip.end) {
+        timelineOffset = currentClip.end - currentClip.start
+      }
+
+      const videoTime = currentClip.trimStart + timelineOffset
+      const constrainedTime = Math.max(
+        currentClip.trimStart,
+        Math.min(currentClip.trimEnd, videoTime)
+      )
+
+      console.log('[ClipForge] Video loaded, seeking to initial position:', constrainedTime)
+      playerRef.current.currentTime = constrainedTime
+    }
+
+    // Add one-time listener for when video metadata is loaded
+    if (videoRef.current) {
+      videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true })
+    }
+
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata)
+      }
+    }
+  }, [currentClip?.id, currentClip?.path])
 
   // RULE 5: Show the frame at the playhead position
   useEffect(() => {
@@ -231,8 +270,15 @@ export function Preview() {
       onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false) }}
     >
       {currentClip ? (
-        <div className="w-full h-full flex items-center justify-center p-6">
-          <div className="relative bg-black rounded-lg overflow-hidden shadow-xl" style={{ width: '960px', maxWidth: '90%', aspectRatio: '16/9' }}>
+        <div className="w-full h-full flex items-center justify-center px-8 py-6">
+          <div
+            className="relative bg-black rounded-lg overflow-hidden shadow-xl max-w-full max-h-full"
+            style={{
+              aspectRatio: '16/9',
+              width: 'min(95%, calc(100vh * 16/9))',
+              height: 'auto'
+            }}
+          >
             <video
               ref={videoRef}
               className="w-full h-full object-contain"

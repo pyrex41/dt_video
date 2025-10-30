@@ -6,5 +6,7 @@
   <string>ClipForge needs camera access to record webcam clips for your video projects.</string>
   <key>NSMicrophoneUsageDescription</key>
   <string>ClipForge needs microphone access to record audio for your video projects.</string>
+  <key>NSCameraUseContinuityCameraDeviceType</key>
+  <true/>
 </dict>
 </plist>

@@ -105,6 +105,23 @@ impl FfmpegBuilder {
         self
     }
 
+    /// Scale and crop to fill target dimensions (zoom in, no black bars)
+    /// This maintains aspect ratio by cropping excess content from center
+    pub fn scale_crop(mut self, width: u32, height: u32) -> Self {
+        // We'll use special negative values to signal scale+crop mode
+        // The actual filter will be built in build_args
+        self.scale_width = Some(width);
+        self.scale_height = Some(height);
+        self.scale_pad = false;
+        // Set crop to same dimensions to trigger crop filter
+        self.crop_width = Some(width);
+        self.crop_height = Some(height);
+        // Leave x,y as None for center crop
+        self.crop_x = None;
+        self.crop_y = None;
+        self
+    }
+
     /// Set even dimensions scaling (for MP4 compatibility)
     pub fn scale_even(mut self) -> Self {
         self.scale_width = Some(0); // Special marker for even scaling
@@ -221,40 +238,66 @@ impl FfmpegBuilder {
         // Video filters
         let mut filters = Vec::new();
 
-        // Apply crop filter first (before scaling)
-        if let (Some(cw), Some(ch)) = (self.crop_width, self.crop_height) {
-            let crop_str = if let (Some(x), Some(y)) = (self.crop_x, self.crop_y) {
-                format!("crop={}:{}:{}:{}", cw, ch, x, y)
-            } else {
-                // Center crop using FFmpeg expressions
-                format!("crop={}:{}:(iw-{})/2:(ih-{})/2", cw, ch, cw, ch)
-            };
-            filters.push(crop_str);
-        }
+        // Check if this is a scale+crop operation (for thumbnails)
+        let is_scale_crop = self.scale_width.is_some()
+            && self.scale_height.is_some()
+            && self.crop_width == self.scale_width
+            && self.crop_height == self.scale_height
+            && self.crop_x.is_none()
+            && self.crop_y.is_none()
+            && !self.scale_pad;
 
-        if let Some(w) = self.scale_width {
-            if w == 0 {
-                // Special case: even dimensions scaling
-                filters.push("scale=trunc(iw/2)*2:trunc(ih/2)*2".to_string());
-            } else if self.scale_pad {
-                // Scale with padding to maintain aspect ratio
-                if let Some(h) = self.scale_height {
-                    // Use scale with force_original_aspect_ratio and pad
-                    filters.push(format!(
-                        "scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:black",
-                        w, h, w, h
-                    ));
-                } else {
-                    // Fallback to regular scale if height not specified
-                    filters.push(format!("scale={}:trunc(ih/2)*2", w));
+        if is_scale_crop {
+            // Scale+crop mode: scale to cover dimensions, then crop excess from center
+            // This creates a "zoom in" effect without stretching
+            let w = self.scale_width.unwrap();
+            let h = self.scale_height.unwrap();
+            // Use explicit center positioning for crop: (iw-width)/2, (ih-height)/2
+            filters.push(format!(
+                "scale={}:{}:force_original_aspect_ratio=increase,crop={}:{}:(iw-{})/2:(ih-{})/2",
+                w, h, w, h, w, h
+            ));
+        } else {
+            // Normal mode: apply crop before scaling (if crop is set without matching scale)
+            if let (Some(cw), Some(ch)) = (self.crop_width, self.crop_height) {
+                // Only apply crop if it's not part of scale_crop
+                if self.scale_width != Some(cw) || self.scale_height != Some(ch) {
+                    let crop_str = if let (Some(x), Some(y)) = (self.crop_x, self.crop_y) {
+                        format!("crop={}:{}:{}:{}", cw, ch, x, y)
+                    } else {
+                        // Center crop using FFmpeg expressions
+                        format!("crop={}:{}:(iw-{})/2:(ih-{})/2", cw, ch, cw, ch)
+                    };
+                    filters.push(crop_str);
                 }
-            } else {
-                let scale_str = if let Some(h) = self.scale_height {
-                    format!("scale={}:{}", w, h)
-                } else {
-                    format!("scale={}:trunc(ih/2)*2", w)
-                };
-                filters.push(scale_str);
+            }
+
+            // Apply scaling
+            if let Some(w) = self.scale_width {
+                if w == 0 {
+                    // Special case: even dimensions scaling
+                    filters.push("scale=trunc(iw/2)*2:trunc(ih/2)*2".to_string());
+                } else if self.scale_pad {
+                    // Scale with padding to maintain aspect ratio
+                    if let Some(h) = self.scale_height {
+                        // Use scale with force_original_aspect_ratio and pad
+                        filters.push(format!(
+                            "scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:black",
+                            w, h, w, h
+                        ));
+                    } else {
+                        // Fallback to regular scale if height not specified
+                        filters.push(format!("scale={}:trunc(ih/2)*2", w));
+                    }
+                } else if !is_scale_crop {
+                    // Regular scale (but not if we're in scale_crop mode)
+                    let scale_str = if let Some(h) = self.scale_height {
+                        format!("scale={}:{}", w, h)
+                    } else {
+                        format!("scale={}:trunc(ih/2)*2", w)
+                    };
+                    filters.push(scale_str);
+                }
             }
         }
 
@@ -304,16 +347,56 @@ impl FfmpegBuilder {
         args
     }
 
+    /// Get platform-specific binary name with extension
+    fn get_platform_binary_name(base_name: &str) -> String {
+        #[cfg(target_os = "windows")]
+        {
+            format!("{}-x86_64-pc-windows-msvc.exe", base_name)
+        }
+        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+        {
+            format!("{}-aarch64-apple-darwin", base_name)
+        }
+        #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+        {
+            format!("{}-x86_64-apple-darwin", base_name)
+        }
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        {
+            format!("{}-x86_64-unknown-linux-gnu", base_name)
+        }
+        #[cfg(not(any(
+            target_os = "windows",
+            all(target_os = "macos", any(target_arch = "aarch64", target_arch = "x86_64")),
+            all(target_os = "linux", target_arch = "x86_64")
+        )))]
+        {
+            base_name.to_string() // Fallback to base name
+        }
+    }
+
     /// Resolve FFmpeg/FFprobe sidecar binary path
     fn resolve_sidecar_binary(
         app_handle: &tauri::AppHandle,
         binary_name: &str,
     ) -> Result<std::path::PathBuf, String> {
+        // Get platform-specific binary name
+        let platform_binary = Self::get_platform_binary_name(binary_name);
+
         // Try bundled sidecar FIRST (required)
         if let Ok(resource_dir) = app_handle.path().resource_dir() {
-            let resource_path = resource_dir.join(binary_name);
+            // Try platform-specific name first
+            let resource_path = resource_dir.join(&platform_binary);
             if resource_path.exists() {
+                eprintln!("INFO: Using bundled {} at {}", binary_name, resource_path.display());
                 return Ok(resource_path);
+            }
+
+            // Fallback to base name (Tauri might strip the suffix)
+            let base_path = resource_dir.join(binary_name);
+            if base_path.exists() {
+                eprintln!("INFO: Using bundled {} at {}", binary_name, base_path.display());
+                return Ok(base_path);
             }
         }
 
@@ -333,8 +416,8 @@ impl FfmpegBuilder {
 
         // Fallback with WARNING - emit to frontend
         let error_msg = format!(
-            "Binary '{}' not found in bundle or system PATH",
-            binary_name
+            "Binary '{}' (platform: {}) not found in bundle or system PATH",
+            binary_name, platform_binary
         );
         eprintln!("ERROR: {}", error_msg);
         let _ = app_handle.emit("ffmpeg-warning", &error_msg);

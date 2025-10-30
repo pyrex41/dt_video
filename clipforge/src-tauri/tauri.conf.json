@@ -23,8 +23,8 @@
     "windows": [
       {
         "title": "ClipForge",
-        "width": 1200,
-        "height": 800,
+        "width": 1680,
+        "height": 1200,
         "resizable": true,
         "fullscreen": false
       }
@@ -35,14 +35,31 @@
     "targets": "all",
     "icon": [
       "icons/icon.icns",
-      "icons/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.png"
     ],
     "externalBin": [
       "binaries/ffmpeg",
       "binaries/ffprobe"
     ],
+    "resources": [
+      "binaries/ffmpeg-aarch64-apple-darwin",
+      "binaries/ffprobe-aarch64-apple-darwin",
+      "binaries/ffmpeg-x86_64-pc-windows-msvc.exe",
+      "binaries/ffprobe-x86_64-pc-windows-msvc.exe",
+      "binaries/ffmpeg-x86_64-unknown-linux-gnu",
+      "binaries/ffprobe-x86_64-unknown-linux-gnu"
+    ],
     "macOS": {
-      "entitlements": "Entitlements.plist"
+      "entitlements": "Entitlements.plist",
+      "minimumSystemVersion": "10.13",
+      "signingIdentity": null,
+      "providerShortName": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
     }
   }
 }

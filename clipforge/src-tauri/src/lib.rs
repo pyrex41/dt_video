@@ -235,39 +235,21 @@ fn generate_thumbnail(
 
         println!("Trying thumbnail extraction at {:.2}s", time_pos);
 
-        // Calculate thumbnail dimensions maintaining aspect ratio
-        let aspect_ratio = width as f32 / height as f32;
-let target_width = 320u32;
-let target_height = 180u32;
-let (thumb_width, thumb_height) = if aspect_ratio > 16.0/9.0 {
-    // Landscape - fit to width, crop height if needed
-    let scaled_height = (target_width as f32 / aspect_ratio) as u32;
-    if scaled_height >= target_height {
-        (target_width, target_height)
-    } else {
-        // Need to crop height to fit 16:9
-        let _crop_height = (target_width as f32 / aspect_ratio) as u32;
-        (target_width, target_height)
-    }
-} else {
-    // Portrait - fit to height, crop width if needed
-    let scaled_width = (target_height as f32 * aspect_ratio) as u32;
-    if scaled_width >= target_width {
-        (target_width, target_height)
-    } else {
-        // Need to crop width to fit 16:9
-        let _crop_width = (target_height as f32 * 16.0 / 9.0) as u32;
-        (target_width, target_height)
-    }
-};
+        // Target thumbnail dimensions (16:9 aspect ratio)
+        let target_width = 320u32;
+        let target_height = 180u32;
+        let target_aspect = target_width as f32 / target_height as f32;
+        let source_aspect = width as f32 / height as f32;
 
-        println!("Video dimensions: {}x{}, aspect ratio: {:.2}, thumbnail: {}x{}",
-                 width, height, aspect_ratio, thumb_width, thumb_height);
+        println!("Video dimensions: {}x{}, aspect ratio: {:.2}, target: {}x{} ({:.2})",
+                 width, height, source_aspect, target_width, target_height, target_aspect);
 
+        // Use scale_crop to zoom in and maintain aspect ratio without stretching
+        // This scales to cover the target dimensions, then crops the excess from center
         let result = utils::ffmpeg::FfmpegBuilder::new()
             .input(&file_path)
             .thumbnail(time_pos)
-            .scale(target_width, Some(target_height))
+            .scale_crop(target_width, target_height)
             .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
             .with_app_handle(app_handle.clone())
             .run_sync();
