@@ -36,36 +36,8 @@ export function Preview() {
     return topClip
   }, [selectedClipId, clips, playhead])
 
-  // SIMPLE RULE 2: Auto-select clip when playhead moves over it
-  useEffect(() => {
-    console.log('[ClipForge] ========================================')
-    console.log('[ClipForge] AUTO-SELECT CHECK')
-    console.log('[ClipForge] Playhead:', playhead)
-    console.log('[ClipForge] Currently selected:', selectedClipId)
-
-    // Find clip at playhead
-    const clipsAtPlayhead = clips.filter((clip) => {
-      const isAt = playhead >= clip.start && playhead < clip.end
-      console.log(`[ClipForge] - ${clip.name}: [${clip.start} to ${clip.end}] playhead=${playhead} → ${isAt ? 'MATCH' : 'no match'}`)
-      return isAt
-    })
-
-    console.log('[ClipForge] Matching clips:', clipsAtPlayhead.length)
-
-    const topClipAtPlayhead = clipsAtPlayhead.sort((a, b) => a.track - b.track)[0]
-
-    if (topClipAtPlayhead) {
-      if (selectedClipId !== topClipAtPlayhead.id) {
-        console.log('[ClipForge] 🔄 SWITCHING TO:', topClipAtPlayhead.name, `(${topClipAtPlayhead.id})`)
-        useClipStore.getState().setSelectedClip(topClipAtPlayhead.id)
-      } else {
-        console.log('[ClipForge] ✓ Already on correct clip:', topClipAtPlayhead.name)
-      }
-    } else {
-      console.log('[ClipForge] ⚠️ No clip at playhead position!')
-    }
-    console.log('[ClipForge] ========================================')
-  }, [playhead, clips]) // Don't include selectedClipId to avoid loops
+  // NO AUTO-SELECTION - user must manually select clips
+  // Playhead position is independent of clip selection
 
   // RULE 3: Initialize Plyr once
   useEffect(() => {
@@ -80,29 +52,39 @@ export function Preview() {
 
     // When video plays, update playhead in timeline
     player.on("timeupdate", () => {
-      if (!isUpdatingFromPlayer.current && currentClip) {
-        const currentTime = player.currentTime
+      if (isUpdatingFromPlayer.current) return
 
-        // Constrain to trim bounds
-        if (currentTime < currentClip.trimStart) {
-          player.currentTime = currentClip.trimStart
-        } else if (currentTime > currentClip.trimEnd) {
-          player.currentTime = currentClip.trimStart
-          player.pause()
-        }
+      // CRITICAL: Get current clip from store, not from closure!
+      // The closure captures the clip value at handler registration time
+      const state = useClipStore.getState()
+      const activeClip = state.selectedClipId
+        ? state.clips.find(c => c.id === state.selectedClipId)
+        : state.clips.filter(c => state.playhead >= c.start && state.playhead < c.end)
+            .sort((a, b) => a.track - b.track)[0]
 
-        // CRITICAL: currentTime is the video file timestamp
-        // The playhead position on the timeline = video time + clip start offset
-        // BUT we need to account for trimStart offset as well
-        // Timeline position = clip.start + (video_time - trimStart)
-        const timelinePosition = currentClip.start + (currentTime - currentClip.trimStart)
+      if (!activeClip) return
 
-        console.log('[ClipForge] 🎬 TIMEUPDATE: video_time=', currentTime, 'clip.start=', currentClip.start, 'trimStart=', currentClip.trimStart, '→ timeline_pos=', timelinePosition)
+      const currentTime = player.currentTime
 
-        isUpdatingFromPlayer.current = true
-        setPlayhead(timelinePosition)
-        setTimeout(() => { isUpdatingFromPlayer.current = false }, 50)
+      // Constrain to trim bounds
+      if (currentTime < activeClip.trimStart) {
+        player.currentTime = activeClip.trimStart
+      } else if (currentTime > activeClip.trimEnd) {
+        player.currentTime = activeClip.trimStart
+        player.pause()
       }
+
+      // CRITICAL: currentTime is the video file timestamp
+      // The playhead position on the timeline = video time + clip start offset
+      // BUT we need to account for trimStart offset as well
+      // Timeline position = clip.start + (video_time - trimStart)
+      const timelinePosition = activeClip.start + (currentTime - activeClip.trimStart)
+
+      console.log('[ClipForge] 🎬 TIMEUPDATE: video_time=', currentTime, 'clip.start=', activeClip.start, 'trimStart=', activeClip.trimStart, '→ timeline_pos=', timelinePosition)
+
+      isUpdatingFromPlayer.current = true
+      setPlayhead(timelinePosition)
+      setTimeout(() => { isUpdatingFromPlayer.current = false }, 50)
     })
 
     player.on("play", () => {

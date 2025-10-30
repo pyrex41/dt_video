@@ -9,7 +9,7 @@
         "testStrategy": "1. Import multiple video clips\n2. Arrange them on timeline with some overlaps\n3. Click concat button\n4. Verify progress bar shows during processing\n5. Check that output file is created in clips/edited/\n6. Verify that overlapping clips are properly trimmed\n7. Test with clips that don't overlap (should concatenate sequentially)",
         "dependencies": [],
         "priority": "high",
-        "status": "done",
+        "status": "cancelled",
         "subtasks": []
       }
     ],

@@ -1,14 +1,13 @@
 "use client"
 
 import { Button } from "./ui/button"
-import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Scissors, Maximize2, Merge } from "lucide-react"
+import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Scissors, Maximize2 } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import { useState, useEffect } from "react"
 
 export function Controls() {
-  const { isPlaying, setIsPlaying, playhead, setPlayhead, zoom, setZoom, clips, selectedClipId, trimClip, concatClips, autoFitZoom, exportProgress, setExportProgress } = useClipStore()
+  const { isPlaying, setIsPlaying, playhead, setPlayhead, zoom, setZoom, clips, selectedClipId, trimClip, autoFitZoom } = useClipStore()
   const [isApplyingTrim, setIsApplyingTrim] = useState(false)
-  const [isConcatenating, setIsConcatenating] = useState(false)
   const [timelineWidth, setTimelineWidth] = useState(800)
 
   const selectedClip = clips.find(c => c.id === selectedClipId)
@@ -73,21 +72,7 @@ export function Controls() {
     }
   }
 
-  const handleConcat = async () => {
-    if (clips.length < 2) return
 
-    setIsConcatenating(true)
-    setExportProgress(0)
-    try {
-      const result = await concatClips()
-      console.log("[ClipForge] Concat completed successfully:", result)
-    } catch (err) {
-      console.error("[ClipForge] Failed to concat clips:", err)
-    } finally {
-      setIsConcatenating(false)
-      setTimeout(() => setExportProgress(0), 2000)
-    }
-  }
 
   return (
     <div className="flex items-center justify-between border-t border-zinc-700 bg-zinc-900 px-6 py-4 shadow-sm">
@@ -141,30 +126,7 @@ export function Controls() {
           </Button>
         )}
 
-        {clips.length >= 2 && (
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              className="h-12 px-6 bg-purple-600 hover:bg-purple-500 text-white border-2 border-purple-500 shadow-lg transition-all duration-200 flex items-center gap-2"
-              onClick={handleConcat}
-              disabled={isConcatenating}
-            >
-              <Merge className="h-5 w-5" />
-              <span className="font-medium">{isConcatenating ? "Concatenating..." : "Concat Clips"}</span>
-            </Button>
-            {isConcatenating && exportProgress > 0 && (
-              <div className="flex items-center gap-2">
-                <div className="w-24 h-2 bg-zinc-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-purple-500 transition-all duration-300 ease-out rounded-full"
-                    style={{ width: `${exportProgress}%` }}
-                  />
-                </div>
-                <span className="text-xs text-zinc-400 font-mono">{Math.round(exportProgress)}%</span>
-              </div>
-            )}
-          </div>
-        )}
+
       </div>
 
       <div className="flex items-center gap-4">

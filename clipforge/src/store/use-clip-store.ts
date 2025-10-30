@@ -31,7 +31,6 @@ interface ClipStore {
   resetWorkspace: () => Promise<void>
   loadState: (state: Partial<ClipStore>) => void
   trimClip: (id: string, start: number, end: number) => Promise<void>
-  concatClips: () => Promise<string>
   hydrateFromWorkspace: () => Promise<void>
 }
 
@@ -163,75 +162,7 @@ export const useClipStore = create<ClipStore>()(
     }
   },
 
-  concatClips: async () => {
-    const state = get()
-    if (state.clips.length < 2) {
-      throw new Error("Need at least 2 clips to concatenate")
-    }
 
-    try {
-      // Sort clips by start time (across all tracks)
-      const sortedClips = [...state.clips].sort((a, b) => a.start - b.start)
-
-      // Calculate new sequential positions for all clips on track 0
-      let currentPosition = 0
-      const updatedClips = sortedClips.map((clip, index) => {
-        const clipDuration = clip.trimEnd - clip.trimStart
-
-        // If there's a next clip and they would overlap, trim current clip
-        let actualTrimEnd = clip.trimEnd
-        if (index < sortedClips.length - 1) {
-          const nextClip = sortedClips[index + 1]
-          const nextClipEnd = currentPosition + clipDuration
-
-          if (nextClipEnd > nextClip.start) {
-            // They would overlap, trim current clip to end at next clip's start
-            const overlapDuration = nextClipEnd - nextClip.start
-            if (overlapDuration < clipDuration) {
-              actualTrimEnd = clip.trimEnd - overlapDuration
-            }
-          }
-        }
-
-        const updatedClip = {
-          ...clip,
-          track: 0, // Move all clips to track 0
-          start: currentPosition,
-          end: currentPosition + (actualTrimEnd - clip.trimStart),
-          trimEnd: actualTrimEnd
-        }
-
-        currentPosition += (actualTrimEnd - clip.trimStart)
-        return updatedClip
-      })
-
-      // Update the store with repositioned clips
-      set((state) => ({
-        clips: state.clips.map(existingClip => {
-          const updated = updatedClips.find(c => c.id === existingClip.id)
-          return updated || existingClip
-        })
-      }))
-
-      // Prepare clips for concat operation
-      const clipsForConcat = updatedClips.map(clip => ({
-        path: clip.path,
-        trim_start: clip.trimStart,
-        trim_end: clip.trimEnd
-      }))
-
-      // Call backend concat function
-      const result = await invoke<string>('concat_clips', {
-        clips: clipsForConcat
-      })
-
-      console.log("[ClipForge] Concat completed successfully:", result)
-      return result
-    } catch (err) {
-      console.error('[ClipForge] Concat failed:', err)
-      throw err
-    }
-  },
 
   trimClip: async (id, trimStart, trimEnd) => {
     const state = get()

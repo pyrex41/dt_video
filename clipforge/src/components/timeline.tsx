@@ -20,6 +20,7 @@ export function Timeline() {
   const panStartRef = useRef({ x: 0, scrollOffset: 0 })
   const [forceRender, setForceRender] = useState(0)
   const { clips, playhead, setPlayhead, zoom, scrollOffset, setScrollOffset, selectedClipId, setSelectedClip, updateClip, trimClip, deleteClip, autoFitZoom } = useClipStore()
+  const prevSelectedClipIdRef = useRef<string | null>(null)
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -93,6 +94,37 @@ export function Timeline() {
     autoFitZoom(timelineWidth)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clips.length, JSON.stringify(clips.map(c => ({ id: c.id, duration: c.duration })))])
+
+  // Auto-scroll timeline when selected clip changes to show playhead position
+  useEffect(() => {
+    if (!selectedClipId || !canvasRef.current) return
+
+    // Only adjust on selection change, not initial mount
+    if (prevSelectedClipIdRef.current === selectedClipId) return
+    prevSelectedClipIdRef.current = selectedClipId
+
+    const canvas = fabricCanvasRef.current
+    if (!canvas) return
+
+    const selectedClip = clips.find(c => c.id === selectedClipId)
+    if (!selectedClip) return
+
+    // Calculate where the playhead should be positioned on screen
+    // We want to center the clip's start position, or show the playhead if it's within the clip
+    const targetTime = playhead >= selectedClip.start && playhead < selectedClip.end
+      ? playhead
+      : selectedClip.start
+
+    const targetX = targetTime * zoom
+    const canvasWidth = canvas.width || 800
+    const viewportCenter = canvasWidth / 2
+
+    // Scroll so the target position is roughly centered
+    const newScrollOffset = Math.max(0, targetX - viewportCenter + TRACK_LABEL_WIDTH)
+
+    console.log('[Timeline] Clip selection changed to:', selectedClip.name, 'adjusting scroll from', scrollOffset, 'to', newScrollOffset)
+    setScrollOffset(newScrollOffset)
+  }, [selectedClipId, clips, playhead, zoom, scrollOffset, setScrollOffset])
 
   // Helper function to calculate Y position for a track
   const getTrackY = (trackNumber: number): number => {
@@ -325,7 +357,7 @@ export function Timeline() {
       trimmedRect.on("mousedown", () => {
         isDraggingRef.current = true
         setSelectedClip(clip.id)
-        console.log('[Timeline] Clip clicked, setting selected clip:', clip.id, clip.name)
+        console.log('[Timeline] Clip selected:', clip.name, '- playhead will show frame relative to clip start')
       })
 
       trimmedRect.on("moving", (e) => {
