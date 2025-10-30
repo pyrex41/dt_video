@@ -1,14 +1,55 @@
 # ClipForge - Current Progress Summary
-
-**Last Updated:** October 29, 2025, 8:33 PM
-**Project Status:** All Core Features Complete ✅
-**Task-Master:** 8/8 tasks done (100%), 20/20 subtasks done (100%)
+**Last Updated:** January 29, 2025 (Evening Session)
+**Project Status:** Active Development - Core Features Complete + Audio Controls Added
+**Commit:** `6a11d7d` - feat: implement audio volume controls with FFmpeg export support
 
 ---
 
-## Recent Accomplishments
+## Recent Accomplishments (Last 3 Sessions)
 
-### Latest Session: Multi-Clip Export Progress & UI Polish (Oct 29, 8:00 PM - 8:33 PM)
+### Session 6: Audio Volume Controls Implementation ✅
+**Date:** January 29, 2025 (Evening)
+
+**Major Achievements:**
+- Implemented full audio volume control with FFmpeg export support
+- Fixed critical stream_copy conflict with audio filters
+- Per-clip volume settings with workspace persistence
+- Volume/mute state preserved across clip switching
+
+**Key Technical Improvements:**
+1. **Plyr Volume Persistence** - volumechange event saves to store
+2. **FFmpeg Audio Filters** - `.volume()` and `.mute()` builder methods
+3. **Smart Codec Selection** - Video copied, audio re-encoded only when needed
+4. **Store.getState() Pattern** - Prevents stale closure data in event handlers
+
+**Files Modified:**
+- `src/components/preview.tsx` - Volume persistence
+- `src-tauri/src/utils/ffmpeg.rs` - Audio filter support
+- `src-tauri/src/lib.rs` - Export data structure
+- `src/components/export-button.tsx` - Export payload
+
+**Impact:** Users can now adjust volume per-clip, settings persist, and exports maintain individual clip volumes
+
+---
+
+### Session 5: Video Preview Loading & Continuity Camera Fix ✅
+**Date:** January 29, 2025 (Earlier)
+
+**Major Achievements:**
+- Fixed video black screen on initial import
+- Fixed video black screen on workspace load
+- Implemented responsive video sizing
+- Added macOS Continuity Camera support
+
+**Root Cause:** Video source was set but seek happened before metadata loaded.
+
+**Files Modified:**
+- `src/components/preview.tsx` - Video loading logic
+- `src-tauri/Info.plist` - Continuity Camera support
+
+---
+
+### Session 4: Multi-Clip Export Progress & UI Polish (Oct 29)
 
 **Major Achievement:** Completed comprehensive progress tracking system for multi-clip exports
 
@@ -83,9 +124,16 @@
 - Resolution selection (Source, 480p, 720p, 1080p, 4K)
 - Export success notifications
 
+#### Audio Features (NEW) ✨
+- Per-clip volume control (0-100%)
+- Per-clip mute toggle
+- Volume persistence across clip switching
+- FFmpeg audio filters in exports
+- Smart re-encoding (video copied, audio only when needed)
+
 #### UI Components
 - Media library with thumbnails
-- Video preview with playback controls
+- Video preview with playback controls (including volume)
 - Timeline with tracks and clips
 - Export button with settings dropdown
 - Progress tracking with real-time updates
@@ -98,6 +146,7 @@
 - TypeScript type safety
 - Bundled FFmpeg binaries (sidecar)
 - Real-time progress events
+- Audio filter support with conditional encoding
 
 ### 🎯 Project Statistics
 
