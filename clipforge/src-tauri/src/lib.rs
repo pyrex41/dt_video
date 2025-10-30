@@ -237,15 +237,29 @@ fn generate_thumbnail(
 
         // Calculate thumbnail dimensions maintaining aspect ratio
         let aspect_ratio = width as f32 / height as f32;
-        let (thumb_width, thumb_height) = if aspect_ratio > 1.0 {
-            // Landscape video - fit width to 320px, scale height
-            let scaled_height = (320.0 / aspect_ratio) as u32;
-            (320, scaled_height)
-        } else {
-            // Portrait or square video - fit height to 180px, scale width
-            let scaled_width = (180.0 * aspect_ratio) as u32;
-            (scaled_width, 180)
-        };
+let target_width = 320u32;
+let target_height = 180u32;
+let (thumb_width, thumb_height) = if aspect_ratio > 16.0/9.0 {
+    // Landscape - fit to width, crop height if needed
+    let scaled_height = (target_width as f32 / aspect_ratio) as u32;
+    if scaled_height >= target_height {
+        (target_width, target_height)
+    } else {
+        // Need to crop height to fit 16:9
+        let _crop_height = (target_width as f32 / aspect_ratio) as u32;
+        (target_width, target_height)
+    }
+} else {
+    // Portrait - fit to height, crop width if needed
+    let scaled_width = (target_height as f32 * aspect_ratio) as u32;
+    if scaled_width >= target_width {
+        (target_width, target_height)
+    } else {
+        // Need to crop width to fit 16:9
+        let _crop_width = (target_height as f32 * 16.0 / 9.0) as u32;
+        (target_width, target_height)
+    }
+};
 
         println!("Video dimensions: {}x{}, aspect ratio: {:.2}, thumbnail: {}x{}",
                  width, height, aspect_ratio, thumb_width, thumb_height);
@@ -253,7 +267,7 @@ fn generate_thumbnail(
         let result = utils::ffmpeg::FfmpegBuilder::new()
             .input(&file_path)
             .thumbnail(time_pos)
-            .scale(thumb_width, Some(thumb_height))
+            .scale(target_width, Some(target_height))
             .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
             .with_app_handle(app_handle.clone())
             .run_sync();
@@ -562,7 +576,7 @@ async fn export_single_clip(
     let result = utils::ffmpeg::FfmpegBuilder::new()
         .input(&clip.path)
         .trim(clip.trim_start, duration)
-        .scale(width, Some(height))
+        .scale_with_pad(width, height)
         .encode()
         .with_progress()
         .output(output_path)
@@ -595,6 +609,9 @@ async fn export_multi_clips(
     // Then concatenate the trimmed versions
     let mut trimmed_clip_paths = Vec::new();
 
+    // Emit initial progress
+    let _ = app_handle.emit("ffmpeg-progress", 0u32);
+
     for (i, clip) in clips.iter().enumerate() {
         let temp_output = app_data_dir.join(format!("temp_clip_{}.mp4", i));
         let duration = clip.trim_end - clip.trim_start;
@@ -603,7 +620,7 @@ async fn export_multi_clips(
         let result = utils::ffmpeg::FfmpegBuilder::new()
             .input(&clip.path)
             .trim(clip.trim_start, duration)
-            .scale(width, Some(height))
+            .scale_with_pad(width, height)
             .encode()
             .output(temp_output.to_str().ok_or("Invalid temp path")?)
             .run(app_handle);
@@ -613,6 +630,10 @@ async fn export_multi_clips(
         }
 
         trimmed_clip_paths.push(temp_output);
+
+        // Emit progress after each clip (90% for individual clips, 10% reserved for concat)
+        let progress = (((i + 1) as f64 / clips.len() as f64) * 90.0) as u32;
+        let _ = app_handle.emit("ffmpeg-progress", progress);
     }
 
     // Create concat list file
@@ -631,7 +652,7 @@ async fn export_multi_clips(
         .map_err(|e| format!("Failed to flush concat list: {}", e))?;
     drop(concat_file); // Close file
 
-    // Use builder for concat operation
+    // Use builder for concat operation (progress will be 90% + concat_progress * 10%)
     let result = utils::ffmpeg::FfmpegBuilder::new()
         .concat(concat_list_path.to_str().ok_or("Invalid concat list path")?)
         .stream_copy()

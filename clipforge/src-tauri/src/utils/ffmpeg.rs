@@ -55,6 +55,7 @@ pub struct FfmpegBuilder {
     concat_list: Option<String>,
     pixel_format: Option<String>,
     app_handle: Option<tauri::AppHandle>,
+    scale_pad: bool,  // Whether to pad to maintain aspect ratio
 }
 
 #[derive(Clone)]
@@ -93,6 +94,14 @@ impl FfmpegBuilder {
     pub fn scale(mut self, width: u32, height: Option<u32>) -> Self {
         self.scale_width = Some(width);
         self.scale_height = height;
+        self
+    }
+
+    /// Scale with padding to maintain aspect ratio (adds black bars)
+    pub fn scale_with_pad(mut self, width: u32, height: u32) -> Self {
+        self.scale_width = Some(width);
+        self.scale_height = Some(height);
+        self.scale_pad = true;
         self
     }
 
@@ -227,6 +236,18 @@ impl FfmpegBuilder {
             if w == 0 {
                 // Special case: even dimensions scaling
                 filters.push("scale=trunc(iw/2)*2:trunc(ih/2)*2".to_string());
+            } else if self.scale_pad {
+                // Scale with padding to maintain aspect ratio
+                if let Some(h) = self.scale_height {
+                    // Use scale with force_original_aspect_ratio and pad
+                    filters.push(format!(
+                        "scale={}:{}:force_original_aspect_ratio=decrease,pad={}:{}:(ow-iw)/2:(oh-ih)/2:black",
+                        w, h, w, h
+                    ));
+                } else {
+                    // Fallback to regular scale if height not specified
+                    filters.push(format!("scale={}:trunc(ih/2)*2", w));
+                }
             } else {
                 let scale_str = if let Some(h) = self.scale_height {
                     format!("scale={}:{}", w, h)
@@ -414,71 +435,88 @@ impl FfmpegBuilder {
             command.stderr(Stdio::piped());
         }
 
+        eprintln!("[FFmpeg] About to spawn command with progress_enabled={}", self.progress_enabled);
         let mut child = command.spawn()
             .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))?;
 
+        eprintln!("[FFmpeg] Command spawned successfully");
+
+        // Spawn a task to read progress from stderr
         if self.progress_enabled {
+            eprintln!("[FFmpeg] Progress is enabled, checking for stderr...");
             if let Some(stderr) = child.stderr.take() {
-                let reader = AsyncBufReader::new(stderr);
-                let mut lines = reader.lines();
+                eprintln!("[FFmpeg] Stderr captured, spawning reader task");
+                let app_handle_clone = app_handle.clone();
+                tokio::spawn(async move {
+                    eprintln!("[FFmpeg Progress Task] Started reading stderr");
+                    let reader = AsyncBufReader::new(stderr);
+                    let mut lines = reader.lines();
 
-                // Throttling state
-                let mut last_progress_time = std::time::Instant::now();
-                const PROGRESS_THROTTLE_MS: u128 = 100; // 100ms = max 10 events/sec
+                    // Throttling state
+                    let mut last_progress_time = std::time::Instant::now();
+                    const PROGRESS_THROTTLE_MS: u128 = 100; // 100ms = max 10 events/sec
 
-                while let Ok(Some(line)) = lines.next_line().await {
-                    if line.starts_with("out_time_us=") {
-                        // Parse microseconds format (more accurate)
-                        if let Some(time_str) = line.strip_prefix("out_time_us=") {
-                            if let Ok(time_us) = time_str.trim().parse::<u64>() {
-                                let current_time = time_us as f64 / 1_000_000.0;  // Convert to seconds
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        eprintln!("[FFmpeg Progress] Line: {}", line);
+                        if line.starts_with("out_time_us=") {
+                            // Parse microseconds format (more accurate)
+                            if let Some(time_str) = line.strip_prefix("out_time_us=") {
+                                if let Ok(time_us) = time_str.trim().parse::<u64>() {
+                                    let current_time = time_us as f64 / 1_000_000.0;  // Convert to seconds
 
-                                // Throttle: only emit if 100ms elapsed since last update
-                                let now = std::time::Instant::now();
-                                if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
-                                    last_progress_time = now;
+                                    // Throttle: only emit if 100ms elapsed since last update
+                                    let now = std::time::Instant::now();
+                                    if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
+                                        last_progress_time = now;
 
-                                    let progress = if let Some(total) = duration {
-                                        ((current_time / total * 100.0).min(100.0)) as u32
-                                    } else {
-                                        0
-                                    };
+                                        let progress = if let Some(total) = duration {
+                                            ((current_time / total * 100.0).min(100.0)) as u32
+                                        } else {
+                                            0
+                                        };
 
-                                    // Emit progress event
-                                    let _ = app_handle.emit("ffmpeg-progress", progress);
+                                        eprintln!("[FFmpeg Progress] Emitting progress: {}%", progress);
+                                        // Emit progress event
+                                        let _ = app_handle_clone.emit("ffmpeg-progress", progress);
+                                    }
                                 }
                             }
-                        }
-                    } else if line.starts_with("out_time_ms=") {
-                        // Fallback to milliseconds if microseconds not available
-                        if let Some(time_str) = line.strip_prefix("out_time_ms=") {
-                            if let Ok(time_ms) = time_str.trim().parse::<u64>() {
-                                let current_time = time_ms as f64 / 1_000.0;  // Convert to seconds
+                        } else if line.starts_with("out_time_ms=") {
+                            // Fallback to milliseconds if microseconds not available
+                            if let Some(time_str) = line.strip_prefix("out_time_ms=") {
+                                if let Ok(time_ms) = time_str.trim().parse::<u64>() {
+                                    let current_time = time_ms as f64 / 1_000.0;  // Convert to seconds
 
-                                // Throttle
-                                let now = std::time::Instant::now();
-                                if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
-                                    last_progress_time = now;
+                                    // Throttle
+                                    let now = std::time::Instant::now();
+                                    if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
+                                        last_progress_time = now;
 
-                                    let progress = if let Some(total) = duration {
-                                        ((current_time / total * 100.0).min(100.0)) as u32
-                                    } else {
-                                        0
-                                    };
+                                        let progress = if let Some(total) = duration {
+                                            ((current_time / total * 100.0).min(100.0)) as u32
+                                        } else {
+                                            0
+                                        };
 
-                                    let _ = app_handle.emit("ffmpeg-progress", progress);
+                                        let _ = app_handle_clone.emit("ffmpeg-progress", progress);
+                                    }
                                 }
                             }
                         }
                     }
-                }
+                    eprintln!("[FFmpeg Progress Task] Finished reading stderr");
+                });
+            } else {
+                eprintln!("[FFmpeg] No stderr available to capture");
             }
+        } else {
+            eprintln!("[FFmpeg] Progress is NOT enabled");
         }
 
-        let output = child.wait_with_output().await
+        let status = child.wait().await
             .map_err(|e| FFmpegError::ExecutionFailed(e.to_string()))?;
 
-        if output.status.success() {
+        if status.success() {
             if let Some(output_path) = &self.output {
                 if !Path::new(output_path).exists() {
                     return Err(FFmpegError::OutputValidation(
@@ -490,7 +528,7 @@ impl FfmpegBuilder {
             Ok(self.output.clone().unwrap_or_default())
         } else {
             Err(FFmpegError::ExecutionFailed(
-                String::from_utf8_lossy(&output.stderr).to_string()
+                format!("FFmpeg process exited with code: {:?}", status.code())
             ))
         }
     }

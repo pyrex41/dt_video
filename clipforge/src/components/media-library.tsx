@@ -148,7 +148,7 @@ export function MediaLibrary() {
                 type="text"
                 placeholder="Search by name, codec, resolution..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => setSearchQuery((e.target as HTMLInputElement)?.value || "")}
                 className="pl-9 pr-9 bg-zinc-800 border-zinc-700 text-sm h-9 focus:border-blue-500"
               />
               {searchQuery && (
@@ -181,14 +181,16 @@ export function MediaLibrary() {
                 <div
                   key={clip.id}
                   draggable
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData("application/json", JSON.stringify(clip))
-                    e.dataTransfer.effectAllowed = "copy"
-                    // Add visual feedback
-                    if (e.currentTarget instanceof HTMLElement) {
-                      e.currentTarget.style.opacity = "0.5"
-                    }
-                  }}
+onDragStart={(e) => {
+    if (e.dataTransfer) {
+      e.dataTransfer.setData("application/json", JSON.stringify(clip))
+      e.dataTransfer.effectAllowed = "copy"
+    }
+    // Add visual feedback
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = "0.5"
+    }
+  }}
                   onDragEnd={(e) => {
                     // Reset visual feedback
                     if (e.currentTarget instanceof HTMLElement) {
@@ -203,7 +205,7 @@ export function MediaLibrary() {
                       <img
                         src={convertFileSrc(clip.thumbnail_path)}
                         alt={clip.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover object-center"
                         draggable={false}
                       />
                     ) : (

@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core"
 import { save } from "@tauri-apps/plugin-dialog"
 import { listen } from "@tauri-apps/api/event"
 import { Button } from "./ui/button"
-import { Download, Settings } from "lucide-react"
+import { Download, Settings, Check } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import { Progress } from "./ui/progress"
 import { Alert, AlertDescription } from "./ui/alert"
@@ -21,27 +21,28 @@ export function ExportButton() {
 
   const { clips, setError, exportProgress, setExportProgress } = useClipStore()
 
-  // Listen for real export progress from backend
+  // Listen for real export progress from backend - set up once on mount
   useEffect(() => {
     let unlisten: (() => void) | undefined
 
     const setupListener = async () => {
-      unlisten = await listen<number>("export-progress", (event) => {
+      unlisten = await listen<number>("ffmpeg-progress", (event) => {
+        console.log("[ExportButton] Received progress event:", event.payload)
         setRealProgress(event.payload)
         setExportProgress(event.payload)
       })
+      console.log("[ExportButton] Progress listener set up")
     }
 
-    if (isExporting) {
-      setupListener()
-    }
+    setupListener()
 
     return () => {
       if (unlisten) {
+        console.log("[ExportButton] Cleaning up progress listener")
         unlisten()
       }
     }
-  }, [isExporting, setExportProgress])
+  }, [setExportProgress])
 
   const handleExport = async () => {
     // Validate clips
@@ -61,7 +62,7 @@ export function ExportButton() {
       setIsExporting(true)
       setError(null)
       setExportProgress(0)
-      setEstimatedProgress(0)
+      setRealProgress(0)
       setExportSuccess(false)
 
       // Show save dialog with timestamp
@@ -130,7 +131,7 @@ export function ExportButton() {
       // Reset progress after delay
       setTimeout(() => {
         setExportProgress(0)
-        setEstimatedProgress(0)
+        setRealProgress(0)
       }, 2000)
 
       // Hide success message after delay
@@ -168,38 +169,53 @@ export function ExportButton() {
             <DropdownMenuContent className="w-48 bg-zinc-800 border-zinc-700 p-2 rounded-lg shadow-xl">
               <DropdownMenuItem
                 onClick={() => setResolution("source")}
-                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+                className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center justify-between text-white ${resolution === "source" ? "bg-zinc-700" : ""}`}
               >
-                <span className="w-6 text-center">🎬</span>
-                <span className="text-sm">Source</span>
+                <div className="flex items-center gap-3">
+                  <span className="w-6 text-center">🎬</span>
+                  <span className="text-sm">Source</span>
+                </div>
+                {resolution === "source" && <Check className="h-4 w-4 text-green-400" />}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setResolution("480p")}
-                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+                className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center justify-between text-white ${resolution === "480p" ? "bg-zinc-700" : ""}`}
               >
-                <span className="w-6 text-center">📱</span>
-                <span className="text-sm">480p (854×480)</span>
+                <div className="flex items-center gap-3">
+                  <span className="w-6 text-center">📱</span>
+                  <span className="text-sm">480p (854×480)</span>
+                </div>
+                {resolution === "480p" && <Check className="h-4 w-4 text-green-400" />}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setResolution("720p")}
-                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+                className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center justify-between text-white ${resolution === "720p" ? "bg-zinc-700" : ""}`}
               >
-                <span className="w-6 text-center">📱</span>
-                <span className="text-sm">720p (1280×720)</span>
+                <div className="flex items-center gap-3">
+                  <span className="w-6 text-center">📱</span>
+                  <span className="text-sm">720p (1280×720)</span>
+                </div>
+                {resolution === "720p" && <Check className="h-4 w-4 text-green-400" />}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setResolution("1080p")}
-                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+                className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center justify-between text-white ${resolution === "1080p" ? "bg-zinc-700" : ""}`}
               >
-                <span className="w-6 text-center">🖥️</span>
-                <span className="text-sm">1080p (1920×1080)</span>
+                <div className="flex items-center gap-3">
+                  <span className="w-6 text-center">🖥️</span>
+                  <span className="text-sm">1080p (1920×1080)</span>
+                </div>
+                {resolution === "1080p" && <Check className="h-4 w-4 text-green-400" />}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setResolution("4K")}
-                className="cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center gap-3 text-white"
+                className={`cursor-pointer hover:bg-zinc-700 rounded-md p-2 flex items-center justify-between text-white ${resolution === "4K" ? "bg-zinc-700" : ""}`}
               >
-                <span className="w-6 text-center">🎥</span>
-                <span className="text-sm">4K (3840×2160)</span>
+                <div className="flex items-center gap-3">
+                  <span className="w-6 text-center">🎥</span>
+                  <span className="text-sm">4K (3840×2160)</span>
+                </div>
+                {resolution === "4K" && <Check className="h-4 w-4 text-green-400" />}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
