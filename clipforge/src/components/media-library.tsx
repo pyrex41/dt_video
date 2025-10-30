@@ -6,6 +6,7 @@ import { Button } from "./ui/button"
 import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp, Search, Trash2, X, RefreshCw } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import { Input } from "./ui/input"
+import { TranscribeButton } from "./transcribe-button"
 
 export function MediaLibrary() {
   const [isCollapsed, setIsCollapsed] = useState(false)
@@ -326,6 +327,11 @@ onDragStart={(e) => {
                 </div>
               ))
             )}
+          </div>
+
+          {/* AI Transcription Section */}
+          <div className="p-4 border-t border-zinc-700">
+            <TranscribeButton />
           </div>
         </>
       )}

@@ -911,6 +911,87 @@ async fn reset_workspace(app_handle: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+async fn write_text_file(
+    file_path: String,
+    content: String,
+) -> Result<(), String> {
+    fs::write(&file_path, content)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn extract_audio(
+    video_path: String,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    // Validate input file exists
+    let input_path = Path::new(&video_path);
+    if !input_path.exists() {
+        return Err(format!("Video file not found: {}", video_path));
+    }
+
+    // Get app data directory and create audio subdirectory
+    let app_data_dir = app_handle.path()
+        .app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    let audio_dir = app_data_dir.join("audio");
+    fs::create_dir_all(&audio_dir)
+        .map_err(|e| format!("Failed to create audio directory: {}", e))?;
+
+    // Generate output filename (mp3 format for better compatibility with Whisper)
+    let file_name = input_path.file_stem()
+        .ok_or("Invalid file path: no filename")?
+        .to_str()
+        .ok_or("Invalid filename encoding")?;
+    let audio_filename = format!("{}.mp3", file_name);
+    let audio_path = audio_dir.join(&audio_filename);
+
+    // Extract audio using FFmpeg
+    // Using -vn (no video), -ar 16000 (16kHz for Whisper), -ac 1 (mono), -b:a 128k (128kbps)
+    let args = vec![
+        "-i".to_string(), video_path.clone(),
+        "-vn".to_string(),
+        "-ar".to_string(), "16000".to_string(),
+        "-ac".to_string(), "1".to_string(),
+        "-b:a".to_string(), "128k".to_string(),
+        "-y".to_string(),
+        audio_path.to_str().ok_or("Invalid audio path")?.to_string(),
+    ];
+
+    // Use FFmpeg builder's execute_command approach
+    let binary_path = match utils::ffmpeg::FfmpegBuilder::resolve_sidecar_binary(&app_handle, "ffmpeg") {
+        Ok(path) => path,
+        Err(e) => {
+            eprintln!("Warning: {}", e);
+            std::path::PathBuf::from("ffmpeg")
+        }
+    };
+
+    let output = tokio::process::Command::new(&binary_path)
+        .args(&args)
+        .output()
+        .await
+        .map_err(|e| format!("Failed to execute FFmpeg: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "FFmpeg failed to extract audio: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    // Verify output file was created
+    if !audio_path.exists() {
+        return Err("Audio file was not created".to_string());
+    }
+
+    Ok(audio_path.to_str()
+        .ok_or("Invalid audio path")?
+        .to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // Initialize nokhwa on macOS before starting Tauri app
@@ -948,7 +1029,8 @@ pub fn run() {
 
   tauri::Builder::default()
     .plugin(tauri_plugin_dialog::init())
-    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, regenerate_thumbnails, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace])
+    .plugin(tauri_plugin_fs::init())
+    .invoke_handler(tauri::generate_handler![check_ffmpeg, import_file, generate_thumbnail, regenerate_thumbnails, trim_clip, save_recording, export_video, record_webcam_clip, save_workspace, load_workspace, list_clips, delete_clip, reset_workspace, extract_audio, write_text_file])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }

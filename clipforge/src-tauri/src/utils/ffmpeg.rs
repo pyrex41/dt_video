@@ -417,7 +417,7 @@ impl FfmpegBuilder {
     }
 
     /// Resolve FFmpeg/FFprobe sidecar binary path
-    fn resolve_sidecar_binary(
+    pub fn resolve_sidecar_binary(
         app_handle: &tauri::AppHandle,
         binary_name: &str,
     ) -> Result<std::path::PathBuf, String> {
