@@ -415,8 +415,10 @@ impl FfmpegBuilder {
         }
     }
 
-    /// Execute with progress monitoring
-    pub async fn run_with_progress(&self, app_handle: &tauri::AppHandle, duration: Option<f64>) -> FFmpegResult<String> {
+    /// Execute with progress monitoring, supporting offset and range for multi-phase progress
+    /// - progress_offset: starting percentage (0-100)
+    /// - progress_range: how much of the total progress this phase represents (e.g., 30 means this phase is 30% of total)
+    pub async fn run_with_progress(&self, app_handle: &tauri::AppHandle, duration: Option<f64>, progress_offset: u32, progress_range: u32) -> FFmpegResult<String> {
         let args = self.build_args();
 
         // Resolve bundled binary
@@ -435,7 +437,7 @@ impl FfmpegBuilder {
             command.stderr(Stdio::piped());
         }
 
-        eprintln!("[FFmpeg] About to spawn command with progress_enabled={}", self.progress_enabled);
+        eprintln!("[FFmpeg] About to spawn command with progress_enabled={}, offset={}, range={}", self.progress_enabled, progress_offset, progress_range);
         let mut child = command.spawn()
             .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))?;
 
@@ -469,15 +471,18 @@ impl FfmpegBuilder {
                                     if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
                                         last_progress_time = now;
 
-                                        let progress = if let Some(total) = duration {
+                                        let phase_progress = if let Some(total) = duration {
                                             ((current_time / total * 100.0).min(100.0)) as u32
                                         } else {
                                             0
                                         };
 
-                                        eprintln!("[FFmpeg Progress] Emitting progress: {}%", progress);
-                                        // Emit progress event
-                                        let _ = app_handle_clone.emit("ffmpeg-progress", progress);
+                                        // Calculate overall progress: offset + (phase% * range%)
+                                        let overall_progress = (progress_offset as f64 + (phase_progress as f64 / 100.0 * progress_range as f64)).min(100.0) as u32;
+                                        eprintln!("[FFmpeg Progress] Phase: {}%, Overall: {}%", phase_progress, overall_progress);
+
+                                        // Emit overall progress
+                                        let _ = app_handle_clone.emit("ffmpeg-progress", overall_progress);
                                     }
                                 }
                             }
@@ -492,13 +497,15 @@ impl FfmpegBuilder {
                                     if now.duration_since(last_progress_time).as_millis() >= PROGRESS_THROTTLE_MS {
                                         last_progress_time = now;
 
-                                        let progress = if let Some(total) = duration {
+                                        let phase_progress = if let Some(total) = duration {
                                             ((current_time / total * 100.0).min(100.0)) as u32
                                         } else {
                                             0
                                         };
 
-                                        let _ = app_handle_clone.emit("ffmpeg-progress", progress);
+                                        // Calculate overall progress: offset + (phase% / 100 * range%)
+                                        let overall_progress = (progress_offset as f64 + (phase_progress as f64 / 100.0 * progress_range as f64)).min(100.0) as u32;
+                                        let _ = app_handle_clone.emit("ffmpeg-progress", overall_progress);
                                     }
                                 }
                             }

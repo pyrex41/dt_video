@@ -145,9 +145,9 @@ export function ExportButton() {
   return (
     <>
       {exportSuccess && exportedFileName && (
-        <Alert className="fixed top-4 right-4 z-50 w-96 bg-green-900/20 border-green-700">
+        <Alert className="fixed top-20 right-4 z-50 w-96 bg-green-900/80 backdrop-blur-md border-green-600 shadow-2xl">
           <CheckCircle className="h-4 w-4 text-green-400 mr-2" />
-          <AlertDescription className="flex items-center">
+          <AlertDescription className="flex items-center text-white font-medium">
             Export successful: {exportedFileName}
           </AlertDescription>
         </Alert>

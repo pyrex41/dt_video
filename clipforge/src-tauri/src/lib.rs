@@ -7,7 +7,7 @@ use nokhwa::utils::{CameraIndex, RequestedFormat, RequestedFormatType};
 use nokhwa::Camera;
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::Manager;
+use tauri::{Manager, Emitter};
 
 pub mod utils;
 
@@ -580,7 +580,7 @@ async fn export_single_clip(
         .encode()
         .with_progress()
         .output(output_path)
-        .run_with_progress(app_handle, Some(duration))
+        .run_with_progress(app_handle, Some(duration), 0, 100) // Single clip: 0-100%
         .await;
 
     match result {
@@ -602,28 +602,36 @@ async fn export_multi_clips(
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
 
-    // Calculate total duration for progress
-    let total_duration: f64 = clips.iter().map(|c| c.trim_end - c.trim_start).sum();
-
     // For multi-clip with trims, we need to pre-process each clip first
     // Then concatenate the trimmed versions
     let mut trimmed_clip_paths = Vec::new();
 
+    // Get total estimated duration for individual clips (for accurate progress)
+    let total_clip_duration: f64 = clips.iter().map(|c| c.trim_end - c.trim_start).sum();
+
     // Emit initial progress
     let _ = app_handle.emit("ffmpeg-progress", 0u32);
+
+    let mut completed_clip_duration = 0.0f64;
 
     for (i, clip) in clips.iter().enumerate() {
         let temp_output = app_data_dir.join(format!("temp_clip_{}.mp4", i));
         let duration = clip.trim_end - clip.trim_start;
 
-        // Use builder for individual clip processing
+        // Calculate progress offset and range for this clip
+        let progress_offset = (completed_clip_duration / total_clip_duration * 90.0) as u32;
+        let progress_range = ((duration / total_clip_duration) * 90.0) as u32;
+
+        // Use builder for individual clip processing with progress
         let result = utils::ffmpeg::FfmpegBuilder::new()
             .input(&clip.path)
             .trim(clip.trim_start, duration)
             .scale_with_pad(width, height)
             .encode()
+            .with_progress()
             .output(temp_output.to_str().ok_or("Invalid temp path")?)
-            .run(app_handle);
+            .run_with_progress(app_handle, Some(duration), progress_offset, progress_range)
+            .await;
 
         if let Err(e) = result {
             return Err(format!("Failed to process clip {}: {}", i, e));
@@ -631,9 +639,8 @@ async fn export_multi_clips(
 
         trimmed_clip_paths.push(temp_output);
 
-        // Emit progress after each clip (90% for individual clips, 10% reserved for concat)
-        let progress = (((i + 1) as f64 / clips.len() as f64) * 90.0) as u32;
-        let _ = app_handle.emit("ffmpeg-progress", progress);
+        // Update completed duration
+        completed_clip_duration += duration;
     }
 
     // Create concat list file
@@ -652,13 +659,14 @@ async fn export_multi_clips(
         .map_err(|e| format!("Failed to flush concat list: {}", e))?;
     drop(concat_file); // Close file
 
-    // Use builder for concat operation (progress will be 90% + concat_progress * 10%)
+    // Use builder for concat operation - progress starts from 90%
+    let concat_duration_estimate = total_clip_duration * 0.1; // Estimate 10% of total time for concat
     let result = utils::ffmpeg::FfmpegBuilder::new()
         .concat(concat_list_path.to_str().ok_or("Invalid concat list path")?)
         .stream_copy()
         .with_progress()
         .output(output_path)
-        .run_with_progress(app_handle, Some(total_duration))
+        .run_with_progress(app_handle, Some(concat_duration_estimate), 90, 10) // 90% offset, 10% range
         .await;
 
     // Clean up temp files
