@@ -1,6 +1,6 @@
 {
   "productName": "ClipForge",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "com.clipforge.dev",
   "build": {
     "beforeDevCommand": "pnpm run dev",
