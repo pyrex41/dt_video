@@ -6,7 +6,7 @@
 
 ## Session Summary
 
-Successfully implemented the concat button functionality for ClipForge that takes all clips stacked as tracks, trims them to handle overlaps, and stitches them into a single continuous track. The implementation includes frontend UI, backend processing, and state management.
+Successfully implemented and fixed the concat button functionality for ClipForge that takes all clips stacked as tracks, trims them to handle overlaps, and stitches them into a single continuous track. The implementation includes frontend UI, backend processing, and state management with proper multi-track handling.
 
 ## Changes Made
 
@@ -20,8 +20,11 @@ Successfully implemented the concat button functionality for ClipForge that take
 ### Store Changes (`src/store/use-clip-store.ts`)
 - Added `concatClips: () => Promise<string>` to interface
 - Implemented `concatClips` function that:
+  - Collects all clips from all tracks
   - Sorts clips by timeline start position
-  - Calculates overlap trimming for each clip
+  - Moves all clips to track 0 (same track line)
+  - Calculates overlap trimming and repositions clips sequentially
+  - Updates store state with repositioned clips
   - Calls backend `concat_clips` command with processed clip data
   - Returns the output file path
 
@@ -43,15 +46,41 @@ Successfully implemented the concat button functionality for ClipForge that take
 
 ### Overlap Trimming Logic
 ```typescript
-// For each clip, check if it overlaps with the next
-const currentEnd = clip.start + (clip.trimEnd - clip.trimStart)
-const nextStart = nextClip.start
+// Collect all clips from all tracks, sort by start time
+const sortedClips = [...state.clips].sort((a, b) => a.start - b.start)
 
-if (currentEnd > nextStart) {
-  // They overlap, trim current clip to end at next clip's start
-  const overlapDuration = currentEnd - nextStart
-  trimEnd = clip.trimEnd - overlapDuration
-}
+// Calculate new sequential positions for all clips on track 0
+let currentPosition = 0
+const updatedClips = sortedClips.map((clip, index) => {
+  const clipDuration = clip.trimEnd - clip.trimStart
+
+  // Handle overlaps by trimming current clip if needed
+  let actualTrimEnd = clip.trimEnd
+  if (index < sortedClips.length - 1) {
+    const nextClip = sortedClips[index + 1]
+    const nextClipEnd = currentPosition + clipDuration
+
+    if (nextClipEnd > nextClip.start) {
+      // They would overlap, trim current clip to end at next clip's start
+      const overlapDuration = nextClipEnd - nextClip.start
+      if (overlapDuration < clipDuration) {
+        actualTrimEnd = clip.trimEnd - overlapDuration
+      }
+    }
+  }
+
+  // Move all clips to track 0 and reposition sequentially
+  const updatedClip = {
+    ...clip,
+    track: 0, // Move all clips to track 0
+    start: currentPosition,
+    end: currentPosition + (actualTrimEnd - clip.trimStart),
+    trimEnd: actualTrimEnd
+  }
+
+  currentPosition += (actualTrimEnd - clip.trimStart)
+  return updatedClip
+})
 ```
 
 ### FFmpeg Processing Pipeline
@@ -81,10 +110,38 @@ if (currentEnd > nextStart) {
 - 🔄 Testing functionality (pending Tauri config fix)
 - 🔄 Tauri v2.x config compatibility
 
+## Bug Fix: Multi-Track Concatenation
+
+**Issue**: Initial implementation only handled clips already in sequence on timeline, not clips on different tracks.
+
+**Fix Applied**:
+- Modified `concatClips` function to collect clips from all tracks
+- Added logic to move all clips to track 0 (same track line)
+- Implemented proper sequential positioning without gaps
+- Updated overlap trimming to work with repositioned clips
+
+**Code Changes**:
+```typescript
+// Before: Only sorted existing clips
+const sortedClips = [...state.clips].sort((a, b) => a.start - b.start)
+
+// After: Sort and reposition all clips to track 0
+const updatedClips = sortedClips.map((clip, index) => {
+  // ... overlap trimming logic ...
+  return {
+    ...clip,
+    track: 0, // Move all clips to track 0
+    start: currentPosition,
+    end: currentPosition + (actualTrimEnd - clip.trimStart),
+    trimEnd: actualTrimEnd
+  }
+})
+```
+
 ## Next Steps
 
 1. **Fix Tauri Configuration**: Update `tauri.conf.json` for v2.x compatibility
-2. **Test Functionality**: Run app and test concat with overlapping clips
+2. **Test Functionality**: Run app and test concat with overlapping clips on different tracks
 3. **Performance Optimization**: Consider caching trimmed clips for repeated operations
 4. **Error Handling**: Add better error messages for edge cases
 5. **Documentation**: Update user guide with concat button usage

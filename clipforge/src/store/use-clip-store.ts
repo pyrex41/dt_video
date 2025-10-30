@@ -91,7 +91,7 @@ export const useClipStore = create<ClipStore>()(
   autoFitZoom: (timelineWidth) => {
     const state = get()
     if (state.clips.length === 0) {
-      set({ zoom: 10 })
+      set({ zoom: 10, scrollOffset: 0 })
       return
     }
 
@@ -106,7 +106,9 @@ export const useClipStore = create<ClipStore>()(
     const zoom = Math.max(0.5, Math.min(50, calculatedZoom))
 
     console.log('[ClipForge] Auto-fit zoom:', { timelineWidth, maxDuration, zoom })
-    set({ zoom })
+    // CRITICAL: Reset scrollOffset when zoom changes
+    // scrollOffset is in pixels, and changing zoom changes what those pixels represent in time
+    set({ zoom, scrollOffset: 0 })
   },
 
   setSelectedClip: (id) => set({ selectedClipId: id }),
@@ -168,33 +170,55 @@ export const useClipStore = create<ClipStore>()(
     }
 
     try {
-      // Sort clips by start time
+      // Sort clips by start time (across all tracks)
       const sortedClips = [...state.clips].sort((a, b) => a.start - b.start)
 
-      // Prepare clips for concat operation
-      const clipsForConcat = sortedClips.map((clip, index) => {
-        let trimStart = clip.trimStart
-        let trimEnd = clip.trimEnd
+      // Calculate new sequential positions for all clips on track 0
+      let currentPosition = 0
+      const updatedClips = sortedClips.map((clip, index) => {
+        const clipDuration = clip.trimEnd - clip.trimStart
 
-        // If there's a next clip and they overlap, trim current clip to end where next starts
+        // If there's a next clip and they would overlap, trim current clip
+        let actualTrimEnd = clip.trimEnd
         if (index < sortedClips.length - 1) {
           const nextClip = sortedClips[index + 1]
-          const currentEnd = clip.start + (clip.trimEnd - clip.trimStart)
-          const nextStart = nextClip.start
+          const nextClipEnd = currentPosition + clipDuration
 
-          if (currentEnd > nextStart) {
-            // They overlap, trim current clip to end at next clip's start
-            const overlapDuration = currentEnd - nextStart
-            trimEnd = clip.trimEnd - overlapDuration
+          if (nextClipEnd > nextClip.start) {
+            // They would overlap, trim current clip to end at next clip's start
+            const overlapDuration = nextClipEnd - nextClip.start
+            if (overlapDuration < clipDuration) {
+              actualTrimEnd = clip.trimEnd - overlapDuration
+            }
           }
         }
 
-        return {
-          path: clip.path,
-          trim_start: trimStart,
-          trim_end: trimEnd
+        const updatedClip = {
+          ...clip,
+          track: 0, // Move all clips to track 0
+          start: currentPosition,
+          end: currentPosition + (actualTrimEnd - clip.trimStart),
+          trimEnd: actualTrimEnd
         }
+
+        currentPosition += (actualTrimEnd - clip.trimStart)
+        return updatedClip
       })
+
+      // Update the store with repositioned clips
+      set((state) => ({
+        clips: state.clips.map(existingClip => {
+          const updated = updatedClips.find(c => c.id === existingClip.id)
+          return updated || existingClip
+        })
+      }))
+
+      // Prepare clips for concat operation
+      const clipsForConcat = updatedClips.map(clip => ({
+        path: clip.path,
+        trim_start: clip.trimStart,
+        trim_end: clip.trimEnd
+      }))
 
       // Call backend concat function
       const result = await invoke<string>('concat_clips', {

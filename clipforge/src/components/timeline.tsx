@@ -575,7 +575,15 @@ export function Timeline() {
     canvas.on("mouse:down", (e) => {
       if (!e.target) {
         const pointer = canvas.getPointer(e.e)
+
+        // Clips are positioned at: clip.start * zoom - scrollOffset + TRACK_LABEL_WIDTH
+        // Reverse this to get time from pointer position:
+        // pointer.x = time * zoom - scrollOffset + TRACK_LABEL_WIDTH
+        // pointer.x - TRACK_LABEL_WIDTH + scrollOffset = time * zoom
+        // (pointer.x - TRACK_LABEL_WIDTH + scrollOffset) / zoom = time
+
         const newTime = Math.max(0, (pointer.x - TRACK_LABEL_WIDTH + scrollOffset) / zoom)
+        console.log('[ClipForge] 🖱️ Timeline click: pointer.x=', pointer.x, 'TRACK_LABEL_WIDTH=', TRACK_LABEL_WIDTH, 'scrollOffset=', scrollOffset, 'zoom=', zoom, '→ TIME=', newTime)
         setPlayhead(newTime)
       }
     })

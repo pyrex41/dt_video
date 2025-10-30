@@ -38,40 +38,33 @@ export function Preview() {
 
   // SIMPLE RULE 2: Auto-select clip when playhead moves over it
   useEffect(() => {
-    console.log('[ClipForge] === Auto-select check ===')
-    console.log('[ClipForge] Playhead position:', playhead)
-    console.log('[ClipForge] All clips:', clips.map(c => ({
-      name: c.name,
-      start: c.start,
-      end: c.end,
-      track: c.track,
-      id: c.id
-    })))
+    console.log('[ClipForge] ========================================')
+    console.log('[ClipForge] AUTO-SELECT CHECK')
+    console.log('[ClipForge] Playhead:', playhead)
+    console.log('[ClipForge] Currently selected:', selectedClipId)
 
     // Find clip at playhead
     const clipsAtPlayhead = clips.filter((clip) => {
       const isAt = playhead >= clip.start && playhead < clip.end
-      console.log(`[ClipForge] ${clip.name}: start=${clip.start}, end=${clip.end}, playhead=${playhead}, isAt=${isAt}`)
+      console.log(`[ClipForge] - ${clip.name}: [${clip.start} to ${clip.end}] playhead=${playhead} → ${isAt ? 'MATCH' : 'no match'}`)
       return isAt
     })
 
-    console.log('[ClipForge] Clips at playhead:', clipsAtPlayhead.map(c => c.name))
+    console.log('[ClipForge] Matching clips:', clipsAtPlayhead.length)
 
     const topClipAtPlayhead = clipsAtPlayhead.sort((a, b) => a.track - b.track)[0]
 
     if (topClipAtPlayhead) {
-      console.log('[ClipForge] Top clip at playhead:', topClipAtPlayhead.name, 'id:', topClipAtPlayhead.id)
-      console.log('[ClipForge] Currently selected ID:', selectedClipId)
-
       if (selectedClipId !== topClipAtPlayhead.id) {
-        console.log('[ClipForge] *** AUTO-SELECTING:', topClipAtPlayhead.name)
+        console.log('[ClipForge] 🔄 SWITCHING TO:', topClipAtPlayhead.name, `(${topClipAtPlayhead.id})`)
         useClipStore.getState().setSelectedClip(topClipAtPlayhead.id)
       } else {
-        console.log('[ClipForge] Already selected, no change')
+        console.log('[ClipForge] ✓ Already on correct clip:', topClipAtPlayhead.name)
       }
     } else {
-      console.log('[ClipForge] No clip at playhead, keeping current selection')
+      console.log('[ClipForge] ⚠️ No clip at playhead position!')
     }
+    console.log('[ClipForge] ========================================')
   }, [playhead, clips]) // Don't include selectedClipId to avoid loops
 
   // RULE 3: Initialize Plyr once
@@ -98,8 +91,16 @@ export function Preview() {
           player.pause()
         }
 
+        // CRITICAL: currentTime is the video file timestamp
+        // The playhead position on the timeline = video time + clip start offset
+        // BUT we need to account for trimStart offset as well
+        // Timeline position = clip.start + (video_time - trimStart)
+        const timelinePosition = currentClip.start + (currentTime - currentClip.trimStart)
+
+        console.log('[ClipForge] 🎬 TIMEUPDATE: video_time=', currentTime, 'clip.start=', currentClip.start, 'trimStart=', currentClip.trimStart, '→ timeline_pos=', timelinePosition)
+
         isUpdatingFromPlayer.current = true
-        setPlayhead(currentTime + currentClip.start)
+        setPlayhead(timelinePosition)
         setTimeout(() => { isUpdatingFromPlayer.current = false }, 50)
       }
     })
@@ -151,25 +152,32 @@ export function Preview() {
     if (!playerRef.current || !currentClip || !videoRef.current || isUpdatingFromPlayer.current) return
 
     // Calculate the position within the video file
-    // playhead is absolute timeline position
-    // clip.start is where the clip starts on the timeline
-    // So: video time = playhead - clip.start
-    let videoTime = playhead - currentClip.start
+    // playhead = absolute timeline position (e.g., 140s)
+    // clip.start = where clip starts on timeline (e.g., 120s)
+    // clip.trimStart = where the visible part starts in the video file (e.g., 5s)
+    //
+    // Timeline offset from clip start: playhead - clip.start = 140 - 120 = 20s
+    // Actual video file position: trimStart + timeline_offset = 5 + 20 = 25s
 
-    // If playhead is outside clip bounds (when clip is selected), show first or last frame
+    let timelineOffset = playhead - currentClip.start
+
+    // If playhead is outside clip bounds (when clip is selected), clamp to clip edges
     if (playhead < currentClip.start) {
-      videoTime = 0 // Show first frame
+      timelineOffset = 0 // Start of clip on timeline
     } else if (playhead >= currentClip.end) {
-      videoTime = currentClip.end - currentClip.start - 0.01 // Show last frame
+      timelineOffset = currentClip.end - currentClip.start // End of clip on timeline
     }
 
-    // Constrain to trim bounds
+    // Convert timeline offset to actual video file position
+    const videoTime = currentClip.trimStart + timelineOffset
+
+    // Constrain to trim bounds (should already be within bounds, but safety check)
     const constrainedTime = Math.max(
       currentClip.trimStart,
       Math.min(currentClip.trimEnd, videoTime)
     )
 
-    console.log('[ClipForge] Playhead:', playhead, 'Clip bounds:', currentClip.start, '-', currentClip.end, 'Video time:', constrainedTime)
+    console.log('[ClipForge] Playhead:', playhead, 'Clip:', currentClip.start, '-', currentClip.end, 'Trim:', currentClip.trimStart, '-', currentClip.trimEnd, 'Timeline offset:', timelineOffset, 'Video time:', constrainedTime)
 
     // Wait for video to be ready
     const seekWhenReady = () => {
