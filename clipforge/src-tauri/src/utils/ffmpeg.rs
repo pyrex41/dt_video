@@ -430,53 +430,52 @@ impl FfmpegBuilder {
         if let Ok(resource_dir) = app_handle.path().resource_dir() {
             eprintln!("INFO: Resource directory: {}", resource_dir.display());
 
-            // Try platform-specific name first
-            let resource_path = resource_dir.join(&platform_binary);
-            eprintln!("INFO: Checking for bundled binary at: {}", resource_path.display());
+            // Check multiple possible locations
+            let possible_paths = vec![
+                // Direct in resource dir (dev/some configs)
+                resource_dir.join(&platform_binary),
+                resource_dir.join(binary_name),
+                // In binaries subdirectory (our actual location)
+                resource_dir.join("binaries").join(&platform_binary),
+                resource_dir.join("binaries").join(binary_name),
+            ];
 
-            if resource_path.exists() {
-                eprintln!("INFO: Found bundled {} at {}", binary_name, resource_path.display());
+            for path in possible_paths {
+                eprintln!("INFO: Checking for bundled binary at: {}", path.display());
 
-                // Ensure the binary is executable (important on macOS/Linux)
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(metadata) = std::fs::metadata(&resource_path) {
-                        let mut perms = metadata.permissions();
-                        perms.set_mode(0o755); // rwxr-xr-x
-                        let _ = std::fs::set_permissions(&resource_path, perms);
+                if path.exists() {
+                    eprintln!("INFO: Found bundled {} at {}", binary_name, path.display());
+
+                    // Ensure the binary is executable (important on macOS/Linux)
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        if let Ok(metadata) = std::fs::metadata(&path) {
+                            let mut perms = metadata.permissions();
+                            perms.set_mode(0o755); // rwxr-xr-x
+                            let _ = std::fs::set_permissions(&path, perms);
+                        }
                     }
+
+                    return Ok(path);
                 }
-
-                return Ok(resource_path);
-            }
-
-            // Fallback to base name (Tauri might strip the suffix)
-            let base_path = resource_dir.join(binary_name);
-            eprintln!("INFO: Checking fallback path: {}", base_path.display());
-
-            if base_path.exists() {
-                eprintln!("INFO: Found bundled {} at {}", binary_name, base_path.display());
-
-                // Ensure the binary is executable
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    if let Ok(metadata) = std::fs::metadata(&base_path) {
-                        let mut perms = metadata.permissions();
-                        perms.set_mode(0o755);
-                        let _ = std::fs::set_permissions(&base_path, perms);
-                    }
-                }
-
-                return Ok(base_path);
             }
 
             // List what's actually in the resource directory for debugging
             eprintln!("INFO: Contents of resource directory:");
             if let Ok(entries) = std::fs::read_dir(&resource_dir) {
                 for entry in entries.flatten() {
-                    eprintln!("  - {}", entry.file_name().to_string_lossy());
+                    let file_name = entry.file_name().to_string_lossy().to_string();
+                    eprintln!("  - {}", file_name);
+
+                    // If it's the binaries directory, list its contents too
+                    if file_name == "binaries" {
+                        if let Ok(bin_entries) = std::fs::read_dir(entry.path()) {
+                            for bin_entry in bin_entries.flatten() {
+                                eprintln!("    - binaries/{}", bin_entry.file_name().to_string_lossy());
+                            }
+                        }
+                    }
                 }
             }
         } else {
