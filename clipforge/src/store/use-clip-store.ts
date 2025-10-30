@@ -53,6 +53,7 @@ export const useClipStore = create<ClipStore>()(
   addClip: (clip) =>
     set((state) => ({
       clips: [...state.clips, clip],
+      selectedClipId: clip.id, // Auto-select newly added clip
     })),
 
   updateClip: (id, updates) =>

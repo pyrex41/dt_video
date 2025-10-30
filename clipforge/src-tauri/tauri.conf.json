@@ -38,17 +38,9 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "externalBin": [
-      "binaries/ffmpeg",
-      "binaries/ffprobe"
-    ],
     "resources": [
-      "binaries/ffmpeg-aarch64-apple-darwin",
-      "binaries/ffprobe-aarch64-apple-darwin",
-      "binaries/ffmpeg-x86_64-pc-windows-msvc.exe",
-      "binaries/ffprobe-x86_64-pc-windows-msvc.exe",
-      "binaries/ffmpeg-x86_64-unknown-linux-gnu",
-      "binaries/ffprobe-x86_64-unknown-linux-gnu"
+      "binaries/ffmpeg-*",
+      "binaries/ffprobe-*"
     ],
     "macOS": {
       "entitlements": "Entitlements.plist",

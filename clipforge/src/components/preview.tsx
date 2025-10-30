@@ -12,6 +12,8 @@ export function Preview() {
   const isUpdatingFromPlayer = useRef(false)
   const isUpdatingPlayState = useRef(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [isVideoLoaded, setIsVideoLoaded] = useState(false)
+  const [isPlyrReady, setIsPlyrReady] = useState(false)
   const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip, selectedClipId, updateClip } = useClipStore()
 
   // SIMPLE RULE 1: Which clip to show?
@@ -20,7 +22,7 @@ export function Preview() {
   const currentClip = useMemo(() => {
     if (selectedClipId) {
       const clip = clips.find(c => c.id === selectedClipId)
-      console.log('[ClipForge] Showing selected clip:', clip?.name || 'NOT FOUND')
+      console.log('[ClipForge] Showing selected clip:', clip?.name || 'NOT FOUND', 'ID:', clip?.id, 'Path:', clip?.path)
       return clip
     }
 
@@ -41,14 +43,20 @@ export function Preview() {
 
   // RULE 3: Initialize Plyr once
   useEffect(() => {
-    if (!videoRef.current) return
+    if (!videoRef.current) {
+      console.log('[ClipForge] Plyr init skipped - no videoRef')
+      return
+    }
 
+    console.log('[ClipForge] Initializing Plyr player...')
     const player = new Plyr(videoRef.current, {
       controls: ["play", "progress", "current-time", "mute", "volume", "fullscreen"],
       keyboard: { focused: true, global: true },
     })
 
     playerRef.current = player
+    setIsPlyrReady(true)
+    console.log('[ClipForge] Plyr player initialized and ready!')
 
     // When video plays, update playhead in timeline
     player.on("timeupdate", () => {
@@ -130,25 +138,42 @@ export function Preview() {
 
   // RULE 4: When clip changes, load the new video
   useEffect(() => {
-    if (!playerRef.current || !currentClip || !videoRef.current) return
+    console.log('[ClipForge] Video loading effect triggered. playerRef:', !!playerRef.current, 'currentClip:', !!currentClip, 'videoRef:', !!videoRef.current)
+
+    if (!playerRef.current || !currentClip || !videoRef.current) {
+      console.log('[ClipForge] Video loading skipped - missing refs or clip')
+      return
+    }
+
+    // Reset loaded state when switching clips
+    setIsVideoLoaded(false)
 
     const player = playerRef.current
     const convertedSrc = convertFileSrc(currentClip.path)
 
     console.log('[ClipForge] Loading video:', currentClip.name, 'from path:', currentClip.path)
+    console.log('[ClipForge] Converted source URL:', convertedSrc)
 
-    // Set source and wait for it to be ready
-    player.source = {
-      type: 'video',
-      sources: [{ src: convertedSrc, type: 'video/mp4' }]
+    // Add error handler for video loading
+    const handleVideoError = (e: Event) => {
+      console.error('[ClipForge] Video load error:', e)
+      const videoEl = videoRef.current
+      if (videoEl) {
+        console.error('[ClipForge] Video error details:', {
+          error: videoEl.error,
+          networkState: videoEl.networkState,
+          readyState: videoEl.readyState,
+          src: videoEl.src
+        })
+      }
     }
-
-    player.volume = currentClip.volume ?? 1
-    player.muted = currentClip.muted ?? false
 
     // Seek to the correct position once video is loaded
     const handleLoadedMetadata = () => {
       if (!playerRef.current || !currentClip) return
+
+      console.log('[ClipForge] Video metadata loaded!')
+      setIsVideoLoaded(true)
 
       // Get current playhead position from store (not from closure)
       const state = useClipStore.getState()
@@ -170,24 +195,36 @@ export function Preview() {
       )
 
       console.log('[ClipForge] Video loaded, seeking to initial position:', constrainedTime)
+      console.log('[ClipForge] Seeking to:', constrainedTime)
       playerRef.current.currentTime = constrainedTime
     }
 
-    // Add one-time listener for when video metadata is loaded
+    // Add listeners BEFORE setting source
     if (videoRef.current) {
       videoRef.current.addEventListener('loadedmetadata', handleLoadedMetadata, { once: true })
+      videoRef.current.addEventListener('error', handleVideoError)
     }
+
+    // Now set the source
+    player.source = {
+      type: 'video',
+      sources: [{ src: convertedSrc, type: 'video/mp4' }]
+    }
+
+    player.volume = currentClip.volume ?? 1
+    player.muted = currentClip.muted ?? false
 
     return () => {
       if (videoRef.current) {
         videoRef.current.removeEventListener('loadedmetadata', handleLoadedMetadata)
+        videoRef.current.removeEventListener('error', handleVideoError)
       }
     }
   }, [currentClip?.id, currentClip?.path])
 
   // RULE 5: Show the frame at the playhead position
   useEffect(() => {
-    if (!playerRef.current || !currentClip || !videoRef.current || isUpdatingFromPlayer.current) return
+    if (!playerRef.current || !currentClip || !videoRef.current || isUpdatingFromPlayer.current || !isVideoLoaded) return
 
     // Calculate the position within the video file
     // playhead = absolute timeline position (e.g., 140s)
@@ -234,7 +271,7 @@ export function Preview() {
     }
 
     seekWhenReady()
-  }, [playhead, currentClip?.id, currentClip?.start, currentClip?.end, currentClip?.trimStart, currentClip?.trimEnd])
+  }, [playhead, currentClip?.id, currentClip?.start, currentClip?.end, currentClip?.trimStart, currentClip?.trimEnd, isVideoLoaded])
 
   // RULE 6: Sync play/pause
   useEffect(() => {
@@ -286,25 +323,28 @@ export function Preview() {
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setIsDragOver(true) }}
       onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false) }}
     >
-      {currentClip ? (
-        <div className="w-full h-full flex items-center justify-center px-8 py-6">
-          <div
-            className="relative bg-black rounded-lg overflow-hidden shadow-xl max-w-full max-h-full"
-            style={{
-              aspectRatio: '16/9',
-              width: 'min(95%, calc(100vh * 16/9))',
-              height: 'auto'
-            }}
-          >
-            <video
-              ref={videoRef}
-              className="w-full h-full object-contain"
-              playsInline
-            />
-          </div>
+      {/* Always render video element so Plyr can initialize */}
+      <div className="w-full h-full flex items-center justify-center px-8 py-6">
+        <div
+          className="relative bg-black rounded-lg overflow-hidden shadow-xl max-w-full max-h-full"
+          style={{
+            aspectRatio: '16/9',
+            width: 'min(95%, calc(100vh * 16/9))',
+            height: 'auto',
+            display: currentClip ? 'block' : 'none'
+          }}
+        >
+          <video
+            ref={videoRef}
+            className="w-full h-full object-contain"
+            playsInline
+          />
         </div>
-      ) : (
-        <div className={`text-center text-muted-foreground transition-all duration-200 ${isDragOver ? 'scale-110' : ''}`}>
+      </div>
+
+      {/* Overlay message when no clip */}
+      {!currentClip && (
+        <div className={`absolute text-center text-muted-foreground transition-all duration-200 ${isDragOver ? 'scale-110' : ''}`}>
           {isDragOver ? (
             <>
               <div className="text-6xl mb-4">📹</div>

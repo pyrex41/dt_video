@@ -90,7 +90,7 @@ export function MediaLibrary() {
 
   return (
     <div
-      className={`relative flex flex-col bg-zinc-900 border-r border-zinc-700 transition-all duration-300 ${
+      className={`relative flex flex-col h-full bg-zinc-900 border-r border-zinc-700 transition-all duration-300 ${
         isCollapsed ? "w-12" : "w-80"
       }`}
     >
