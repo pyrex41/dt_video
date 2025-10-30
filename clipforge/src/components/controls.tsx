@@ -1,12 +1,12 @@
 "use client"
 
 import { Button } from "./ui/button"
-import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Scissors, Maximize2 } from "lucide-react"
+import { Play, Pause, SkipBack, SkipForward, ZoomIn, ZoomOut, Scissors, Maximize2, Copy, Clipboard } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import { useState, useEffect } from "react"
 
 export function Controls() {
-  const { isPlaying, setIsPlaying, playhead, setPlayhead, zoom, setZoom, clips, selectedClipId, trimClip, autoFitZoom } = useClipStore()
+  const { isPlaying, setIsPlaying, playhead, setPlayhead, zoom, setZoom, clips, selectedClipId, trimClip, autoFitZoom, copyClip, pasteClip, copiedClip } = useClipStore()
   const [isApplyingTrim, setIsApplyingTrim] = useState(false)
   const [timelineWidth, setTimelineWidth] = useState(800)
 
@@ -126,6 +126,28 @@ export function Controls() {
           </Button>
         )}
 
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-12 w-12 hover:bg-zinc-800 text-white border border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => selectedClipId && copyClip(selectedClipId)}
+            disabled={!selectedClipId}
+            title={selectedClipId ? "Copy clip (Cmd/Ctrl+C)" : "Select a clip to copy"}
+          >
+            <Copy className="h-5 w-5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-12 w-12 hover:bg-zinc-800 text-white border border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => pasteClip()}
+            disabled={!copiedClip}
+            title={copiedClip ? "Paste clip (Cmd/Ctrl+V)" : "Copy a clip first"}
+          >
+            <Clipboard className="h-5 w-5" />
+          </Button>
+        </div>
 
       </div>
 

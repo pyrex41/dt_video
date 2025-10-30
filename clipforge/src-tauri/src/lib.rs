@@ -492,6 +492,8 @@ struct ClipExportInfo {
     path: String,
     trim_start: f64,
     trim_end: f64,
+    volume: Option<f64>,  // Audio volume (0.0-1.0, where 1.0 is 100%)
+    muted: Option<bool>,  // Whether audio is muted
 }
 
 #[tauri::command]
@@ -554,13 +556,22 @@ async fn export_single_clip(
     // Calculate total duration for progress calculation
     let duration = clip.trim_end - clip.trim_start;
 
-    // Use builder for single clip export
-    let result = utils::ffmpeg::FfmpegBuilder::new()
+    // Build FFmpeg command with volume/mute settings
+    let mut builder = utils::ffmpeg::FfmpegBuilder::new()
         .input(&clip.path)
         .trim(clip.trim_start, duration)
         .scale_with_pad(width, height)
         .encode()
-        .with_progress()
+        .with_progress();
+
+    // Apply audio settings if present
+    if clip.muted == Some(true) {
+        builder = builder.mute();
+    } else if let Some(vol) = clip.volume {
+        builder = builder.volume(vol);
+    }
+
+    let result = builder
         .output(output_path)
         .run_with_progress(app_handle, Some(duration), 0, 100) // Single clip: 0-100%
         .await;
@@ -604,13 +615,22 @@ async fn export_multi_clips(
         let progress_offset = (completed_clip_duration / total_clip_duration * 90.0) as u32;
         let progress_range = ((duration / total_clip_duration) * 90.0) as u32;
 
-        // Use builder for individual clip processing with progress
-        let result = utils::ffmpeg::FfmpegBuilder::new()
+        // Build FFmpeg command with volume/mute settings
+        let mut builder = utils::ffmpeg::FfmpegBuilder::new()
             .input(&clip.path)
             .trim(clip.trim_start, duration)
             .scale_with_pad(width, height)
             .encode()
-            .with_progress()
+            .with_progress();
+
+        // Apply audio settings if present
+        if clip.muted == Some(true) {
+            builder = builder.mute();
+        } else if let Some(vol) = clip.volume {
+            builder = builder.volume(vol);
+        }
+
+        let result = builder
             .output(temp_output.to_str().ok_or("Invalid temp path")?)
             .run_with_progress(app_handle, Some(duration), progress_offset, progress_range)
             .await;

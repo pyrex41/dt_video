@@ -11,6 +11,7 @@ interface ClipStore {
   zoom: number
   scrollOffset: number
   selectedClipId: string | null
+  copiedClip: Clip | null
   error: string | null
   exportProgress: number
   isHydrated: boolean
@@ -25,6 +26,8 @@ interface ClipStore {
   setScrollOffset: (offset: number) => void
   autoFitZoom: (timelineWidth: number) => void
   setSelectedClip: (id: string | null) => void
+  copyClip: (id: string) => void
+  pasteClip: (targetTime?: number, targetTrack?: number) => void
   setError: (error: string | null) => void
   setExportProgress: (progress: number) => void
   clearClips: () => void
@@ -42,6 +45,7 @@ export const useClipStore = create<ClipStore>()(
   zoom: 10,
   scrollOffset: 0,
   selectedClipId: null,
+  copiedClip: null,
   error: null,
   exportProgress: 0,
   isHydrated: false,
@@ -111,6 +115,100 @@ export const useClipStore = create<ClipStore>()(
   },
 
   setSelectedClip: (id) => set({ selectedClipId: id }),
+
+  copyClip: (id) => {
+    const state = get()
+    const clip = state.clips.find(c => c.id === id)
+    if (clip) {
+      set({ copiedClip: { ...clip } })
+      console.log('[ClipForge] Copied clip:', clip.name)
+    }
+  },
+
+  pasteClip: (targetTime, targetTrack) => {
+    const state = get()
+    if (!state.copiedClip) return
+
+    // Determine paste position
+    // If targetTime/targetTrack are provided, use those (for UI buttons)
+    // Otherwise, use current playhead position and selected clip's track (for keyboard shortcuts)
+    let pasteTime = targetTime ?? state.playhead
+    let pasteTrack = targetTrack ?? 0
+
+    // If a clip is selected, use its track
+    if (targetTrack === undefined && state.selectedClipId) {
+      const selectedClip = state.clips.find(c => c.id === state.selectedClipId)
+      if (selectedClip) {
+        pasteTrack = selectedClip.track
+      }
+    }
+
+    const duration = state.copiedClip.end - state.copiedClip.start
+
+    // Find clips on the target track
+    const clipsOnTrack = state.clips.filter(c => c.track === pasteTrack)
+    const sortedClips = [...clipsOnTrack].sort((a, b) => a.start - b.start)
+
+    // Check for overlaps and find the right position
+    const hasOverlap = sortedClips.some(c =>
+      (pasteTime >= c.start && pasteTime < c.end) ||
+      (pasteTime + duration > c.start && pasteTime + duration <= c.end) ||
+      (pasteTime <= c.start && pasteTime + duration > c.start)
+    )
+
+    let finalStartTime = pasteTime
+
+    if (hasOverlap) {
+      // Find overlapping clips
+      const overlappingClips = sortedClips.filter(c =>
+        (pasteTime >= c.start && pasteTime < c.end) ||
+        (pasteTime + duration > c.start && pasteTime + duration <= c.end) ||
+        (pasteTime <= c.start && pasteTime + duration > c.start)
+      )
+
+      if (overlappingClips.length > 0) {
+        // Shift all overlapping clips to the right
+        const clipsThatNeedShifting = sortedClips.filter(c => c.start >= pasteTime)
+
+        // Calculate how much to shift
+        const shiftAmount = duration
+
+        // Update all clips that need to be shifted
+        clipsThatNeedShifting.forEach(clipToShift => {
+          state.updateClip(clipToShift.id, {
+            start: clipToShift.start + shiftAmount,
+            end: clipToShift.end + shiftAmount,
+          })
+        })
+
+        finalStartTime = pasteTime
+      }
+    }
+
+    // Create the new pasted clip with a unique ID
+    const newClip: Clip = {
+      ...state.copiedClip,
+      id: `${state.copiedClip.id}-paste-${Date.now()}`,
+      start: finalStartTime,
+      end: finalStartTime + duration,
+      track: pasteTrack,
+    }
+
+    // Add the pasted clip
+    set((state) => ({
+      clips: [...state.clips, newClip],
+      selectedClipId: newClip.id,
+      playhead: finalStartTime,
+    }))
+
+    console.log('[ClipForge] Pasted clip:', {
+      original: state.copiedClip.name,
+      newId: newClip.id,
+      track: pasteTrack,
+      startTime: finalStartTime,
+    })
+  },
+
   setError: (error) => set({ error }),
   setExportProgress: (progress) => set({ exportProgress: progress }),
   clearClips: () => set({ clips: [], selectedClipId: null }),

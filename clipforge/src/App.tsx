@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "./components/ui/alert"
 import { AlertCircle, Info } from "lucide-react"
 
 function App() {
-  const { error, setError, hydrateFromWorkspace, isHydrated, isPlaying, setIsPlaying, selectedClipId, setSelectedClip, deleteClip, clips } = useClipStore()
+  const { error, setError, hydrateFromWorkspace, isHydrated, isPlaying, setIsPlaying, selectedClipId, setSelectedClip, deleteClip, clips, copyClip, pasteClip } = useClipStore()
 
   useEffect(() => {
     const initialize = async () => {
@@ -72,12 +72,30 @@ function App() {
             }
           }
           break
+
+        case 'c': // Cmd+C / Ctrl+C - copy selected clip
+        case 'C':
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault()
+            if (selectedClipId) {
+              copyClip(selectedClipId)
+            }
+          }
+          break
+
+        case 'v': // Cmd+V / Ctrl+V - paste copied clip
+        case 'V':
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault()
+            pasteClip()
+          }
+          break
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isPlaying, setIsPlaying, selectedClipId, setSelectedClip, deleteClip, clips])
+  }, [isPlaying, setIsPlaying, selectedClipId, setSelectedClip, deleteClip, clips, copyClip, pasteClip])
 
   // Listen for FFmpeg warnings from backend
   useEffect(() => {

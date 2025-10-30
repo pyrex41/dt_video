@@ -12,7 +12,7 @@ export function Preview() {
   const isUpdatingFromPlayer = useRef(false)
   const isUpdatingPlayState = useRef(false)
   const [isDragOver, setIsDragOver] = useState(false)
-  const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip, selectedClipId } = useClipStore()
+  const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip, selectedClipId, updateClip } = useClipStore()
 
   // SIMPLE RULE 1: Which clip to show?
   // - If a clip is selected, show that clip
@@ -100,6 +100,23 @@ export function Preview() {
         isUpdatingPlayState.current = true
         setIsPlaying(false)
         setTimeout(() => { isUpdatingPlayState.current = false }, 100)
+      }
+    })
+
+    // Persist volume/mute changes to the store
+    player.on("volumechange", () => {
+      const state = useClipStore.getState()
+      const activeClip = state.selectedClipId
+        ? state.clips.find(c => c.id === state.selectedClipId)
+        : state.clips.filter(c => state.playhead >= c.start && state.playhead < c.end)
+            .sort((a, b) => a.track - b.track)[0]
+
+      if (activeClip) {
+        console.log('[ClipForge] 🔊 Volume changed:', { volume: player.volume, muted: player.muted })
+        updateClip(activeClip.id, {
+          volume: player.volume,
+          muted: player.muted
+        })
       }
     })
 

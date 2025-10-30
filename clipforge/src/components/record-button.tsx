@@ -3,24 +3,58 @@
 import { useState, useRef, useEffect } from "react"
 import { invoke } from "@tauri-apps/api/core"
 import { Button } from "./ui/button"
-import { Video, Monitor, Circle, Mic, MicOff, PictureInPicture } from "lucide-react"
+import { Video, Monitor, Circle, Mic, MicOff, PictureInPicture, Loader2 } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import type { Clip } from "../types/clip"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
 
 export function RecordButton() {
   const [isRecording, setIsRecording] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [recordingType, setRecordingType] = useState<"webcam" | "screen" | "pip" | null>(null)
-  const [activeRecorder, setActiveRecorder] = useState<{ recorder: MediaRecorder; stream: MediaStream } | null>(null)
+  const [activeRecorder, setActiveRecorder] = useState<{
+    recorder: MediaRecorder;
+    stream: MediaStream;
+    additionalStreams?: MediaStream[]; // For PiP mode
+  } | null>(null)
   const [startTime, setStartTime] = useState<number>(0)
   const { addClip, setError, clips } = useClipStore()
 
   const stopRecording = () => {
     if (activeRecorder) {
       console.log("[ClipForge] Manual stop requested")
-      activeRecorder.recorder.stop()
-      activeRecorder.stream.getTracks().forEach((track) => track.stop())
+      try {
+        // Stop the recorder first
+        if (activeRecorder.recorder.state !== 'inactive') {
+          activeRecorder.recorder.stop()
+        }
+
+        // Stop all tracks in the main stream
+        activeRecorder.stream.getTracks().forEach((track) => {
+          console.log("[ClipForge] Stopping track:", track.kind, track.label)
+          track.stop()
+        })
+
+        // Stop additional streams (PiP mode)
+        if (activeRecorder.additionalStreams) {
+          activeRecorder.additionalStreams.forEach((stream) => {
+            stream.getTracks().forEach((track) => {
+              console.log("[ClipForge] Stopping additional track:", track.kind, track.label)
+              track.stop()
+            })
+          })
+        }
+
+        console.log("[ClipForge] All tracks stopped successfully")
+      } catch (err) {
+        console.error("[ClipForge] Error stopping recording:", err)
+      }
+
       setActiveRecorder(null)
+      setIsRecording(false)
+      setRecordingType(null)
+    } else {
+      console.warn("[ClipForge] Stop requested but no active recorder found")
     }
   }
 
@@ -70,7 +104,9 @@ export function RecordButton() {
 
       recorder.onstop = async () => {
         try {
-          console.log("[ClipForge] Recording stopped, processing...")
+          console.log("[ClipForge] Webcam recording stopped, processing...")
+          setIsRecording(false)
+          setIsProcessing(true)
 
           // Validate we have data
           if (chunks.length === 0) {
@@ -136,7 +172,7 @@ export function RecordButton() {
             throw new Error("Generated clip has invalid values")
           }
 
-          setIsRecording(false)
+          setIsProcessing(false)
           setRecordingType(null)
           setActiveRecorder(null)
         } catch (err) {
@@ -144,6 +180,7 @@ export function RecordButton() {
           console.error("[ClipForge] Error processing webcam recording:", err)
           setError(`Failed to process webcam recording: ${errorMessage}`)
           setIsRecording(false)
+          setIsProcessing(false)
           setRecordingType(null)
           setActiveRecorder(null)
         }
@@ -201,7 +238,9 @@ export function RecordButton() {
 
       recorder.onstop = async () => {
         try {
-          console.log("[ClipForge] Recording stopped, processing...")
+          console.log("[ClipForge] Screen recording stopped, processing...")
+          setIsRecording(false)
+          setIsProcessing(true)
 
           // Validate we have data
           if (chunks.length === 0) {
@@ -267,7 +306,7 @@ export function RecordButton() {
             throw new Error("Generated clip has invalid values")
           }
 
-          setIsRecording(false)
+          setIsProcessing(false)
           setRecordingType(null)
           setActiveRecorder(null)
         } catch (err) {
@@ -275,6 +314,7 @@ export function RecordButton() {
           console.error("[ClipForge] Error processing screen recording:", err)
           setError(`Failed to process screen recording: ${errorMessage}`)
           setIsRecording(false)
+          setIsProcessing(false)
           setRecordingType(null)
           setActiveRecorder(null)
         }
@@ -403,6 +443,8 @@ export function RecordButton() {
       recorder.onstop = async () => {
         try {
           console.log("[ClipForge] PiP recording stopped, processing...")
+          setIsRecording(false)
+          setIsProcessing(true)
 
           // Stop animation loop
           cancelAnimationFrame(animationId)
@@ -475,7 +517,7 @@ export function RecordButton() {
             throw new Error("Generated clip has invalid values")
           }
 
-          setIsRecording(false)
+          setIsProcessing(false)
           setRecordingType(null)
           setActiveRecorder(null)
         } catch (err) {
@@ -483,13 +525,18 @@ export function RecordButton() {
           console.error("[ClipForge] Error processing PiP recording:", err)
           setError(`Failed to process PiP recording: ${errorMessage}`)
           setIsRecording(false)
+          setIsProcessing(false)
           setRecordingType(null)
           setActiveRecorder(null)
         }
       }
 
-      // Store recorder reference for manual stop
-      setActiveRecorder({ recorder, stream: compositeStream })
+      // Store recorder reference for manual stop (including original streams)
+      setActiveRecorder({
+        recorder,
+        stream: compositeStream,
+        additionalStreams: [screenStream, webcamStream]
+      })
       setStartTime(Date.now())
 
       recorder.start()
@@ -503,6 +550,26 @@ export function RecordButton() {
     }
   }
 
+  // Processing state (saving and converting video)
+  if (isProcessing) {
+    return (
+      <div className="flex items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-12 w-12 text-white border-2 border-blue-500 shadow-lg cursor-not-allowed"
+          disabled
+        >
+          <Loader2 className="h-6 w-6 animate-spin text-blue-400" />
+        </Button>
+        <div className="text-sm text-blue-300 font-mono bg-zinc-800 px-4 py-2 rounded-md border border-blue-600 shadow-md">
+          Processing {recordingType === "webcam" ? "Webcam" : recordingType === "screen" ? "Screen" : "PiP"} Recording...
+        </div>
+      </div>
+    )
+  }
+
+  // Recording state
   if (isRecording) {
     const audioTrack = activeRecorder?.stream.getAudioTracks()[0]
     const isMuted = audioTrack ? !audioTrack.enabled : false

@@ -56,6 +56,8 @@ pub struct FfmpegBuilder {
     pixel_format: Option<String>,
     app_handle: Option<tauri::AppHandle>,
     scale_pad: bool,  // Whether to pad to maintain aspect ratio
+    volume: Option<f64>,  // Audio volume (0.0-1.0, where 1.0 is 100%)
+    muted: bool,  // Whether audio should be muted
 }
 
 #[derive(Clone)]
@@ -197,6 +199,18 @@ impl FfmpegBuilder {
         self
     }
 
+    /// Set audio volume (0.0-1.0, where 1.0 is 100%)
+    pub fn volume(mut self, vol: f64) -> Self {
+        self.volume = Some(vol.max(0.0).min(1.0));
+        self
+    }
+
+    /// Mute audio output
+    pub fn mute(mut self) -> Self {
+        self.muted = true;
+        self
+    }
+
     /// Build the argument vector
     pub fn build_args(&self) -> Vec<String> {
         let mut args: Vec<String> = Vec::new();
@@ -306,9 +320,36 @@ impl FfmpegBuilder {
         }
         } // Close the else block for concat handling
 
+        // Audio filters (volume and mute)
+        let mut audio_filters = Vec::new();
+
+        if self.muted {
+            // Mute audio completely
+            audio_filters.push("volume=0".to_string());
+        } else if let Some(vol) = self.volume {
+            // Apply volume adjustment (convert 0.0-1.0 to FFmpeg volume scale)
+            audio_filters.push(format!("volume={}", vol));
+        }
+
+        let has_audio_filters = !audio_filters.is_empty();
+
+        if has_audio_filters {
+            args.extend(["-af".to_string(), audio_filters.join(",")]);
+        }
+
         // Encoding parameters (applied to both concat and regular input)
         if self.stream_copy {
-            args.extend(["-c".to_string(), "copy".to_string(), "-avoid_negative_ts".to_string(), "make_zero".to_string()]);
+            // If we have audio filters, we can't use stream_copy for audio
+            // Instead, copy video stream only and encode audio
+            if has_audio_filters {
+                args.extend([
+                    "-c:v".to_string(), "copy".to_string(),
+                    "-c:a".to_string(), "aac".to_string(),
+                    "-avoid_negative_ts".to_string(), "make_zero".to_string()
+                ]);
+            } else {
+                args.extend(["-c".to_string(), "copy".to_string(), "-avoid_negative_ts".to_string(), "make_zero".to_string()]);
+            }
         } else {
             if let Some(codec) = &self.video_codec {
                 args.extend(["-c:v".to_string(), codec.clone()]);
