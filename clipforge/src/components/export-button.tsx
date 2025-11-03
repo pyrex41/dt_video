@@ -90,13 +90,14 @@ export function ExportButton() {
       // Sort clips by timeline position (start time)
       const sortedClips = [...validClips].sort((a, b) => a.start - b.start)
 
-      // Prepare clips with trim and audio information
+      // Prepare clips with trim, audio, and caption information
       const clipsWithTrim = sortedClips.map(c => ({
         path: c.path,
         trim_start: c.trimStart,
         trim_end: c.trimEnd,
         volume: c.volume,
-        muted: c.muted
+        muted: c.muted,
+        vtt_path: c.transcription?.vttPath
       }))
 
       console.log("[ClipForge] Exporting clips:", clipsWithTrim)

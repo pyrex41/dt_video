@@ -494,6 +494,7 @@ struct ClipExportInfo {
     trim_end: f64,
     volume: Option<f64>,  // Audio volume (0.0-1.0, where 1.0 is 100%)
     muted: Option<bool>,  // Whether audio is muted
+    vtt_path: Option<String>,  // Path to VTT caption file
 }
 
 #[tauri::command]
@@ -577,7 +578,22 @@ async fn export_single_clip(
         .await;
 
     match result {
-        Ok(_) => Ok(output_path.to_string()),
+        Ok(_) => {
+            // Copy VTT caption file if it exists
+            if let Some(vtt_path) = &clip.vtt_path {
+                let vtt_source = Path::new(vtt_path);
+                if vtt_source.exists() {
+                    // Create destination VTT path (same name as output, but .vtt extension)
+                    let output_vtt = Path::new(output_path).with_extension("vtt");
+                    if let Err(e) = fs::copy(vtt_source, &output_vtt) {
+                        eprintln!("Warning: Failed to copy VTT file: {}", e);
+                    } else {
+                        println!("Copied VTT captions to: {:?}", output_vtt);
+                    }
+                }
+            }
+            Ok(output_path.to_string())
+        },
         Err(e) => Err(e.to_string()),
     }
 }
@@ -678,7 +694,20 @@ async fn export_multi_clips(
     let _ = fs::remove_file(&concat_list_path);
 
     match result {
-        Ok(_) => Ok(output_path.to_string()),
+        Ok(_) => {
+            // For multi-clip exports, we don't merge VTT files (would be complex)
+            // But we could copy the first clip's VTT if only one has captions
+            // For now, just log a message if captions exist
+            let clips_with_captions: Vec<_> = clips.iter()
+                .filter(|c| c.vtt_path.is_some())
+                .collect();
+
+            if !clips_with_captions.is_empty() {
+                println!("Note: {} clip(s) have captions. Multi-clip VTT merging not yet supported.", clips_with_captions.len());
+            }
+
+            Ok(output_path.to_string())
+        },
         Err(e) => Err(e.to_string()),
     }
 }

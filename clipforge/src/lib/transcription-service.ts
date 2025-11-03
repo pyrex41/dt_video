@@ -7,6 +7,19 @@ export interface TranscriptionProgress {
   progress: number;
 }
 
+export interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface TranscriptionResult {
+  text: string;
+  segments: TranscriptionSegment[];
+  vttPath?: string;
+  language: string;
+}
+
 export class TranscriptionService {
   private openai: OpenAI;
   private progressCallback?: (progress: TranscriptionProgress) => void;
@@ -29,7 +42,7 @@ export class TranscriptionService {
     }
   }
 
-  async transcribeVideo(videoPath: string): Promise<string> {
+  async transcribeVideo(videoPath: string): Promise<TranscriptionResult> {
     try {
       // Step 1: Extract audio (0-20%)
       this.updateProgress('extracting', 'Extracting audio from video...', 0);
@@ -38,15 +51,24 @@ export class TranscriptionService {
 
       // Step 2: Transcribe with Whisper (20-70%)
       this.updateProgress('transcribing', 'Transcribing audio with Whisper V3...', 20);
-      const rawTranscription = await this.transcribeAudio(audioPath);
+      const whisperResult = await this.transcribeAudio(audioPath);
       this.updateProgress('transcribing', 'Transcription complete', 70);
 
-      // Step 3: Clean up with Llama (70-100%)
+      // Step 3: Clean up with Llama (70-90%)
       this.updateProgress('cleaning', 'Cleaning up transcription with Llama...', 70);
-      const cleanedTranscription = await this.cleanTranscription(rawTranscription);
+      const cleanedText = await this.cleanTranscription(whisperResult.text);
+      this.updateProgress('cleaning', 'Generating captions...', 90);
+
+      // Step 4: Generate WebVTT file (90-100%)
+      const vttPath = await this.generateAndSaveVTT(videoPath, whisperResult.segments);
       this.updateProgress('complete', 'Transcription complete!', 100);
 
-      return cleanedTranscription;
+      return {
+        text: cleanedText,
+        segments: whisperResult.segments,
+        vttPath,
+        language: whisperResult.language || 'en',
+      };
     } catch (error) {
       console.error('[Transcription] Error:', error);
       throw error;
@@ -64,7 +86,11 @@ export class TranscriptionService {
     }
   }
 
-  private async transcribeAudio(audioPath: string): Promise<string> {
+  private async transcribeAudio(audioPath: string): Promise<{
+    text: string;
+    segments: TranscriptionSegment[];
+    language?: string;
+  }> {
     try {
       console.log('[Transcription] Starting Whisper transcription for:', audioPath);
 
@@ -81,7 +107,20 @@ export class TranscriptionService {
       });
 
       console.log('[Transcription] Whisper transcription complete');
-      return transcription.text;
+      console.log('[Transcription] Segments found:', transcription.segments?.length || 0);
+
+      // Extract segments with timestamps
+      const segments: TranscriptionSegment[] = (transcription.segments || []).map((seg: any) => ({
+        start: seg.start,
+        end: seg.end,
+        text: seg.text.trim(),
+      }));
+
+      return {
+        text: transcription.text,
+        segments,
+        language: transcription.language,
+      };
     } catch (error) {
       console.error('[Transcription] Whisper error:', error);
       throw new Error(`Whisper transcription failed: ${error}`);
@@ -183,5 +222,70 @@ export class TranscriptionService {
       console.error('[Transcription] Download error:', error);
       throw new Error(`Failed to download transcription: ${error}`);
     }
+  }
+
+  /**
+   * Generate WebVTT file from transcription segments and save it alongside the video
+   */
+  private async generateAndSaveVTT(
+    videoPath: string,
+    segments: TranscriptionSegment[]
+  ): Promise<string> {
+    try {
+      console.log('[Transcription] Generating WebVTT file...');
+
+      // Generate VTT content
+      const vttContent = this.generateWebVTT(segments);
+
+      // Determine VTT file path (same directory, same name, .vtt extension)
+      const vttPath = videoPath.replace(/\.(mp4|mov|webm|avi|mkv)$/i, '.vtt');
+
+      // Save VTT file using Tauri command
+      await invoke('write_text_file', {
+        filePath: vttPath,
+        content: vttContent,
+      });
+
+      console.log('[Transcription] WebVTT file saved to:', vttPath);
+      return vttPath;
+    } catch (error) {
+      console.error('[Transcription] VTT generation error:', error);
+      throw new Error(`Failed to generate VTT file: ${error}`);
+    }
+  }
+
+  /**
+   * Convert transcription segments to WebVTT format
+   */
+  private generateWebVTT(segments: TranscriptionSegment[]): string {
+    let vtt = 'WEBVTT\n\n';
+
+    segments.forEach((segment, index) => {
+      const startTime = this.formatVTTTime(segment.start);
+      const endTime = this.formatVTTTime(segment.end);
+
+      // Add cue with index, timestamps, and text
+      vtt += `${index + 1}\n`;
+      vtt += `${startTime} --> ${endTime}\n`;
+      vtt += `${segment.text}\n\n`;
+    });
+
+    return vtt;
+  }
+
+  /**
+   * Format seconds to WebVTT timestamp format (HH:MM:SS.mmm)
+   */
+  private formatVTTTime(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+
+    return `${hours.toString().padStart(2, '0')}:${minutes
+      .toString()
+      .padStart(2, '0')}:${secs.toString().padStart(2, '0')}.${ms
+      .toString()
+      .padStart(3, '0')}`;
   }
 }

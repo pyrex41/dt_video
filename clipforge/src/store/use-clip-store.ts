@@ -1,7 +1,7 @@
 import { create } from "zustand"
 import { subscribeWithSelector } from "zustand/middleware"
 import { invoke } from "@tauri-apps/api/core"
-import type { Clip } from "../types/clip"
+import type { Clip, Transcription } from "../types/clip"
 import { debouncedSaveWorkspace, loadWorkspace } from "../lib/workspace-persistence"
 
 interface ClipStore {
@@ -18,6 +18,7 @@ interface ClipStore {
 
   addClip: (clip: Clip) => void
   updateClip: (id: string, updates: Partial<Clip>) => void
+  updateClipTranscription: (id: string, transcription: Transcription) => void
   removeClip: (id: string) => void
   deleteClip: (id: string) => Promise<void>
   setPlayhead: (time: number) => void
@@ -59,6 +60,13 @@ export const useClipStore = create<ClipStore>()(
   updateClip: (id, updates) =>
     set((state) => ({
       clips: state.clips.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+    })),
+
+  updateClipTranscription: (id, transcription) =>
+    set((state) => ({
+      clips: state.clips.map((c) =>
+        c.id === id ? { ...c, transcription } : c
+      ),
     })),
 
   removeClip: (id) =>

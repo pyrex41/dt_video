@@ -9,7 +9,8 @@
       "Bash(cargo doc:*)",
       "Bash(cargo test:*)",
       "Bash(ffmpeg:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(pnpm list:*)"
     ],
     "deny": [],
     "ask": []

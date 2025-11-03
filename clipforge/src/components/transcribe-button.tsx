@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Download, Loader2, AlertCircle } from 'lucide-react';
+import { FileText, Download, Loader2, AlertCircle, Subtitles } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Progress } from './ui/progress';
@@ -8,9 +8,10 @@ import { TranscriptionService, TranscriptionProgress } from '../lib/transcriptio
 import { useClipStore } from '../store/use-clip-store';
 
 export function TranscribeButton() {
-  const { clips, selectedClipId } = useClipStore();
+  const { clips, selectedClipId, updateClipTranscription } = useClipStore();
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcription, setTranscription] = useState<string>('');
+  const [hasCaptions, setHasCaptions] = useState(false);
   const [error, setError] = useState<string>('');
   const [progress, setProgress] = useState<TranscriptionProgress | null>(null);
   const [apiKey, setApiKey] = useState<string>('');
@@ -46,12 +47,24 @@ export function TranscribeButton() {
 
       // Start transcription
       const result = await service.transcribeVideo(selectedClip.path);
-      setTranscription(result);
+      setTranscription(result.text);
+      setHasCaptions(!!result.vttPath);
+
+      // Save transcription data to clip store
+      updateClipTranscription(selectedClip.id, {
+        text: result.text,
+        segments: result.segments,
+        vttPath: result.vttPath,
+        language: result.language,
+      });
+
       setProgress({
         stage: 'complete',
-        message: 'Transcription complete!',
+        message: 'Transcription complete! Captions added to video.',
         progress: 100,
       });
+
+      console.log('[TranscribeButton] Transcription saved with', result.segments.length, 'segments');
     } catch (err) {
       console.error('[TranscribeButton] Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to transcribe video');
@@ -181,6 +194,16 @@ export function TranscribeButton() {
         <Alert variant="destructive" className="bg-red-950/20 border-red-900">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Captions Success Message */}
+      {hasCaptions && (
+        <Alert className="bg-green-950/20 border-green-900">
+          <Subtitles className="h-4 w-4 text-green-400" />
+          <AlertDescription className="text-green-400">
+            Captions generated! They will appear automatically when you play this clip.
+          </AlertDescription>
         </Alert>
       )}
 

@@ -50,8 +50,9 @@ export function Preview() {
 
     console.log('[ClipForge] Initializing Plyr player...')
     const player = new Plyr(videoRef.current, {
-      controls: ["play", "progress", "current-time", "mute", "volume", "fullscreen"],
+      controls: ["play", "progress", "current-time", "mute", "volume", "captions", "fullscreen"],
       keyboard: { focused: true, global: true },
+      captions: { active: true, update: true },
     })
 
     playerRef.current = player
@@ -205,10 +206,23 @@ export function Preview() {
       videoRef.current.addEventListener('error', handleVideoError)
     }
 
-    // Now set the source
+    // Now set the source with optional captions
+    const tracks = currentClip.transcription?.vttPath ? [{
+      kind: 'captions' as const,
+      label: 'English',
+      srclang: 'en',
+      src: convertFileSrc(currentClip.transcription.vttPath),
+      default: true
+    }] : []
+
     player.source = {
       type: 'video',
-      sources: [{ src: convertedSrc, type: 'video/mp4' }]
+      sources: [{ src: convertedSrc, type: 'video/mp4' }],
+      tracks
+    }
+
+    if (tracks.length > 0) {
+      console.log('[ClipForge] Loading captions from:', currentClip.transcription?.vttPath)
     }
 
     player.volume = currentClip.volume ?? 1
