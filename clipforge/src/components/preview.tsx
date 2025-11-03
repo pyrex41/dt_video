@@ -11,9 +11,12 @@ export function Preview() {
   const playerRef = useRef<Plyr | null>(null)
   const isUpdatingFromPlayer = useRef(false)
   const isUpdatingPlayState = useRef(false)
+  const loadingClipIdRef = useRef<string | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [isVideoLoaded, setIsVideoLoaded] = useState(false)
   const [isPlyrReady, setIsPlyrReady] = useState(false)
+  const [videoError, setVideoError] = useState<string | null>(null)
+  const [isVideoLoading, setIsVideoLoading] = useState(false)
   const { clips, playhead, isPlaying, setPlayhead, setIsPlaying, addClip, selectedClipId, updateClip } = useClipStore()
 
   // SIMPLE RULE 1: Which clip to show?
@@ -139,42 +142,86 @@ export function Preview() {
 
   // RULE 4: When clip changes, load the new video
   useEffect(() => {
-    console.log('[ClipForge] Video loading effect triggered. playerRef:', !!playerRef.current, 'currentClip:', !!currentClip, 'videoRef:', !!videoRef.current)
+    console.log('[Preview] 🎬 Video loading effect triggered. playerRef:', !!playerRef.current, 'currentClip:', !!currentClip, 'videoRef:', !!videoRef.current)
 
     if (!playerRef.current || !currentClip || !videoRef.current) {
-      console.log('[ClipForge] Video loading skipped - missing refs or clip')
+      console.log('[Preview] ⏭️  Video loading skipped - missing refs or clip')
+      setIsVideoLoaded(false)
+      setIsVideoLoading(false)
+      setVideoError(null)
       return
     }
 
-    // Reset loaded state when switching clips
+    // Abort if we're already loading this clip
+    if (loadingClipIdRef.current === currentClip.id) {
+      console.log('[Preview] ⏭️  Already loading this clip, skipping:', currentClip.name)
+      return
+    }
+
+    console.log('[Preview] 📂 Loading new video:', currentClip.name, 'ID:', currentClip.id)
+    console.log('[Preview] 📍 File path:', currentClip.path)
+
+    // Mark this clip as loading
+    loadingClipIdRef.current = currentClip.id
     setIsVideoLoaded(false)
+    setIsVideoLoading(true)
+    setVideoError(null)
 
     const player = playerRef.current
     const convertedSrc = convertFileSrc(currentClip.path)
 
-    console.log('[ClipForge] Loading video:', currentClip.name, 'from path:', currentClip.path)
-    console.log('[ClipForge] Converted source URL:', convertedSrc)
+    console.log('[Preview] 🔗 Converted source URL:', convertedSrc)
 
     // Add error handler for video loading
     const handleVideoError = (e: Event) => {
-      console.error('[ClipForge] Video load error:', e)
+      // Only handle error if this is still the clip we're loading
+      if (loadingClipIdRef.current !== currentClip.id) {
+        console.log('[Preview] ⏭️  Ignoring error for stale clip load')
+        return
+      }
+
+      console.error('[Preview] ❌ Video load error for:', currentClip.name)
       const videoEl = videoRef.current
-      if (videoEl) {
-        console.error('[ClipForge] Video error details:', {
-          error: videoEl.error,
+      if (videoEl?.error) {
+        const errorMessages = [
+          'Unknown error',
+          'Video loading aborted',
+          'Network error loading video',
+          'Video format not supported',
+          'Video source not found'
+        ]
+        const errorMsg = errorMessages[videoEl.error.code] || errorMessages[0]
+        console.error('[Preview] 💥 Error details:', {
+          code: videoEl.error.code,
+          message: videoEl.error.message,
           networkState: videoEl.networkState,
           readyState: videoEl.readyState,
           src: videoEl.src
         })
+        setVideoError(`${errorMsg}: ${currentClip.name}`)
+      } else {
+        setVideoError(`Failed to load video: ${currentClip.name}`)
       }
+      setIsVideoLoading(false)
+      setIsVideoLoaded(false)
+      loadingClipIdRef.current = null
     }
 
     // Seek to the correct position once video is loaded
     const handleLoadedMetadata = () => {
+      // Only handle if this is still the clip we're loading
+      if (loadingClipIdRef.current !== currentClip.id) {
+        console.log('[Preview] ⏭️  Ignoring metadata for stale clip load')
+        return
+      }
+
       if (!playerRef.current || !currentClip) return
 
-      console.log('[ClipForge] Video metadata loaded!')
+      console.log('[Preview] ✅ Video metadata loaded successfully!')
       setIsVideoLoaded(true)
+      setIsVideoLoading(false)
+      setVideoError(null)
+      loadingClipIdRef.current = null
 
       // Get current playhead position from store (not from closure)
       const state = useClipStore.getState()
@@ -195,8 +242,7 @@ export function Preview() {
         Math.min(currentClip.trimEnd, videoTime)
       )
 
-      console.log('[ClipForge] Video loaded, seeking to initial position:', constrainedTime)
-      console.log('[ClipForge] Seeking to:', constrainedTime)
+      console.log('[Preview] 🎯 Initial seek to:', constrainedTime, 'seconds (playhead:', currentPlayhead, ')')
       playerRef.current.currentTime = constrainedTime
     }
 
@@ -372,6 +418,36 @@ export function Preview() {
               <p className="text-xs mt-4 text-zinc-600">💡 Drag clips from the library to add them to the timeline</p>
             </>
           )}
+        </div>
+      )}
+
+      {/* Loading overlay */}
+      {currentClip && isVideoLoading && (
+        <div className="absolute text-center text-white bg-black/60 backdrop-blur-sm rounded-lg px-6 py-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-3" />
+          <p className="text-sm font-medium">Loading video...</p>
+          <p className="text-xs text-zinc-400 mt-1">{currentClip.name}</p>
+        </div>
+      )}
+
+      {/* Error overlay */}
+      {currentClip && videoError && (
+        <div className="absolute text-center bg-red-900/80 backdrop-blur-sm border-2 border-red-600 rounded-lg px-6 py-4 max-w-md">
+          <div className="text-4xl mb-3">⚠️</div>
+          <p className="text-sm font-semibold text-white mb-2">Video Load Failed</p>
+          <p className="text-xs text-red-200">{videoError}</p>
+          <button
+            onClick={() => {
+              console.log('[Preview] 🔄 Retrying video load')
+              setVideoError(null)
+              loadingClipIdRef.current = null
+              setIsVideoLoaded(false)
+              setIsVideoLoading(false)
+            }}
+            className="mt-4 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+          >
+            Retry
+          </button>
         </div>
       )}
     </div>

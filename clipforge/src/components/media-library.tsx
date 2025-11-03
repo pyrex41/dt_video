@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import { convertFileSrc, invoke } from "@tauri-apps/api/core"
 import { Button } from "./ui/button"
-import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp, Search, Trash2, X, RefreshCw } from "lucide-react"
+import { ChevronLeft, ChevronRight, Film, ChevronDown, ChevronUp, Search, Trash2, X, RefreshCw, FileQuestion } from "lucide-react"
 import { useClipStore } from "../store/use-clip-store"
 import { Input } from "./ui/input"
 import { TranscribeButton } from "./transcribe-button"
@@ -14,6 +14,7 @@ export function MediaLibrary() {
   const [searchQuery, setSearchQuery] = useState("")
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [isRegeneratingThumbnails, setIsRegeneratingThumbnails] = useState(false)
+  const [brokenThumbnails, setBrokenThumbnails] = useState<Set<string>>(new Set())
   const { clips, deleteClip } = useClipStore()
 
   const formatDuration = (seconds: number): string => {
@@ -202,13 +203,23 @@ onDragStart={(e) => {
                 >
                   {/* Thumbnail */}
                   <div className="aspect-video bg-zinc-700 rounded mb-2 overflow-hidden group-hover:ring-2 group-hover:ring-blue-500 transition-all">
-                    {clip.thumbnail_path ? (
+                    {clip.thumbnail_path && !brokenThumbnails.has(clip.id) ? (
                       <img
                         src={convertFileSrc(clip.thumbnail_path)}
                         alt={clip.name}
                         className="w-full h-full object-cover object-center"
                         draggable={false}
+                        onError={(e) => {
+                          console.error(`[MediaLibrary] ❌ Failed to load thumbnail for ${clip.name}:`, clip.thumbnail_path)
+                          setBrokenThumbnails(prev => new Set([...prev, clip.id]))
+                          e.currentTarget.style.display = 'none'
+                        }}
                       />
+                    ) : brokenThumbnails.has(clip.id) ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-2">
+                        <FileQuestion className="h-8 w-8 text-orange-500" />
+                        <span className="text-xs text-orange-400">Thumbnail failed</span>
+                      </div>
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <Film className="h-8 w-8 text-zinc-500" />

@@ -159,11 +159,18 @@ async fn import_file(file_path: String, app_handle: tauri::AppHandle) -> Result<
     // Generate thumbnail automatically
     let thumbnail_path = match generate_thumbnail(dest_path_str.clone(), duration, width, height, app_handle.clone()) {
         Ok(path) => {
-            println!("Successfully generated thumbnail: {}", path);
+            println!("[Import] ✅ Successfully generated thumbnail: {}", path);
             Some(path)
         },
         Err(e) => {
-            eprintln!("Warning: Failed to generate thumbnail for {}: {}", file_path, e);
+            eprintln!("[Import] ⚠️  WARNING: Failed to generate thumbnail for {}: {}", file_path, e);
+
+            // Emit warning event to frontend for user notification
+            let _ = app_handle.emit("thumbnail-generation-failed", serde_json::json!({
+                "file_path": file_path,
+                "error": e.to_string()
+            }));
+
             None  // Continue even if thumbnail generation fails
         }
     };
@@ -201,9 +208,17 @@ fn generate_thumbnail(
         .app_data_dir()
         .map_err(|e| format!("Failed to get app data directory: {}", e))?;
     let thumbnails_dir = app_data_dir.join("clips").join("thumbnails");
-    println!("Creating thumbnails directory: {}", thumbnails_dir.display());
-    fs::create_dir_all(&thumbnails_dir)
-        .map_err(|e| format!("Failed to create thumbnails directory: {}", e))?;
+    println!("[Thumbnail] Creating thumbnails directory: {}", thumbnails_dir.display());
+
+    // Check directory permissions before attempting creation
+    if let Err(e) = fs::create_dir_all(&thumbnails_dir) {
+        eprintln!("[Thumbnail] ❌ Failed to create thumbnails directory: {}", e);
+        eprintln!("[Thumbnail] Directory path: {}", thumbnails_dir.display());
+        eprintln!("[Thumbnail] Parent exists: {}", thumbnails_dir.parent().map(|p| p.exists()).unwrap_or(false));
+        return Err(format!("Failed to create thumbnails directory: {}", e));
+    }
+
+    println!("[Thumbnail] ✅ Thumbnails directory ready: {}", thumbnails_dir.display());
 
     // Generate thumbnail filename based on source file
     let file_name = input_path.file_stem()
@@ -221,19 +236,22 @@ fn generate_thumbnail(
         0.0,  // Try beginning as last resort
     ];
 
-    println!("Generating thumbnail for video: {} (duration: {:.2}s)", file_path, duration);
-    println!("Thumbnail output path: {}", thumbnail_path.display());
+    println!("[Thumbnail] 🎬 Generating thumbnail for video: {} (duration: {:.2}s)", file_path, duration);
+    println!("[Thumbnail] 📁 Output path: {}", thumbnail_path.display());
 
     let mut last_error = String::new();
+    let mut attempt = 0;
 
     for &time_pos in &time_positions {
+        attempt += 1;
+
         // Skip if time position is beyond video duration
         if time_pos >= duration && duration > 0.0 {
-            println!("Skipping time position {:.2}s (beyond duration)", time_pos);
+            println!("[Thumbnail] ⏩ Skipping time position {:.2}s (beyond duration {:.2}s)", time_pos, duration);
             continue;
         }
 
-        println!("Trying thumbnail extraction at {:.2}s", time_pos);
+        println!("[Thumbnail] 🔍 Attempt {}/{}: Trying extraction at {:.2}s", attempt, time_positions.len(), time_pos);
 
         // Target thumbnail dimensions (16:9 aspect ratio)
         let target_width = 320u32;
@@ -241,7 +259,7 @@ fn generate_thumbnail(
         let target_aspect = target_width as f32 / target_height as f32;
         let source_aspect = width as f32 / height as f32;
 
-        println!("Video dimensions: {}x{}, aspect ratio: {:.2}, target: {}x{} ({:.2})",
+        println!("[Thumbnail] 📐 Video: {}x{} (aspect: {:.2}), Target: {}x{} (aspect: {:.2})",
                  width, height, source_aspect, target_width, target_height, target_aspect);
 
         // Use scale_crop to zoom in and maintain aspect ratio without stretching
@@ -252,6 +270,7 @@ fn generate_thumbnail(
             .scale_crop(target_width, target_height)
             .output(thumbnail_path.to_str().ok_or("Invalid thumbnail path")?)
             .with_app_handle(app_handle.clone())
+            .timeout(60)  // 60-second timeout to prevent hangs on corrupted videos
             .run_sync();
 
         match result {
@@ -259,24 +278,25 @@ fn generate_thumbnail(
                 // Verify thumbnail was actually created
                 if thumbnail_path.exists() {
                     let metadata = thumbnail_path.metadata().map_err(|e| format!("Failed to get thumbnail metadata: {}", e))?;
-                    println!("Successfully generated thumbnail: {} (size: {} bytes)", thumbnail_path.display(), metadata.len());
+                    println!("[Thumbnail] ✅ SUCCESS! Generated thumbnail: {} (size: {} bytes)", thumbnail_path.display(), metadata.len());
                     return Ok(thumbnail_path.to_str()
                         .ok_or("Invalid thumbnail path")?
                         .to_string());
                 } else {
                     last_error = "Thumbnail file was not created".to_string();
-                    println!("Thumbnail file not found at expected path");
+                    eprintln!("[Thumbnail] ⚠️  FFmpeg succeeded but file not found at expected path: {}", thumbnail_path.display());
                     continue;
                 }
             }
             Err(e) => {
                 last_error = format!("FFmpeg error at {:.2}s: {}", time_pos, e);
-                println!("Failed at {:.2}s: {}", time_pos, e);
+                eprintln!("[Thumbnail] ❌ Attempt {} failed at {:.2}s: {}", attempt, time_pos, e);
                 continue;
             }
         }
     }
 
+    eprintln!("[Thumbnail] ❌ FAILED: All {} attempts exhausted. Last error: {}", attempt, last_error);
     Err(format!("Failed to generate thumbnail after trying multiple time positions: {}", last_error))
 }
 

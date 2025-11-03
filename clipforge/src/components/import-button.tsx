@@ -43,14 +43,26 @@ export function ImportButton() {
       const errors: string[] = []
       let currentEnd = clips.length > 0 ? Math.max(...clips.map((c) => c.end)) : 0
 
+      console.log(`[Import] 🚀 Starting import of ${files.length} file(s)`)
+
       for (let i = 0; i < files.length; i++) {
         const filePath = files[i]
-        setImportProgress({ current: i + 1, total: files.length })
-        try {
-          const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "video.mp4"
+        const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || "video.mp4"
 
+        setImportProgress({ current: i + 1, total: files.length })
+        console.log(`[Import] 📁 Processing file ${i + 1}/${files.length}: ${fileName}`)
+
+        try {
+          console.log(`[Import] 🔄 Invoking import_file for: ${filePath}`)
           const metadata = await invoke<VideoMetadata>("import_file", {
             filePath: filePath,
+          })
+
+          console.log(`[Import] ✅ Metadata received for ${fileName}:`, {
+            duration: metadata.duration,
+            resolution: `${metadata.width}x${metadata.height}`,
+            hasThumbnail: !!metadata.thumbnail_path,
+            thumbnailPath: metadata.thumbnail_path
           })
 
           const newClip: Clip = {
@@ -73,32 +85,38 @@ export function ImportButton() {
             muted: false, // Default not muted
           }
 
+          console.log(`[Import] 💾 Adding clip to store: ${newClip.id}`)
           addClip(newClip)
           currentEnd += metadata.duration // Update for next clip
           importedCount++
-          console.log("[v0] Imported clip:", newClip)
+          console.log(`[Import] ✅ Successfully imported ${fileName} (${importedCount}/${files.length})`)
         } catch (fileError) {
           failedCount++
-          const fileName = filePath.split("/").pop() || filePath.split("\\").pop() || filePath
           errors.push(`${fileName}: ${fileError}`)
-          console.error(`[v0] Import error for ${fileName}:`, fileError)
+          console.error(`[Import] ❌ Failed to import ${fileName}:`, fileError)
+          console.error(`[Import] Error details:`, fileError)
         }
       }
 
       // Provide user feedback
+      console.log(`[Import] 📊 Import complete: ${importedCount} succeeded, ${failedCount} failed`)
+
       if (importedCount > 0 && failedCount === 0) {
-        console.log(`[v0] Successfully imported ${importedCount} file(s)`)
+        console.log(`[Import] ✅ All ${importedCount} file(s) imported successfully!`)
       } else if (importedCount > 0 && failedCount > 0) {
+        console.warn(`[Import] ⚠️  Partial success: ${importedCount} imported, ${failedCount} failed`)
         setError(`Imported ${importedCount} file(s), but ${failedCount} failed: ${errors.join(", ")}`)
       } else if (failedCount > 0) {
+        console.error(`[Import] ❌ All imports failed: ${errors.join(", ")}`)
         setError(`Failed to import all files: ${errors.join(", ")}`)
       }
     } catch (err) {
       setError(`Failed to import video: ${err}`)
-      console.error("[v0] Import error:", err)
+      console.error("[Import] ❌ Critical import error:", err)
     } finally {
       setIsImporting(false)
       setImportProgress({ current: 0, total: 0 })
+      console.log("[Import] 🏁 Import process finished")
     }
   }
 

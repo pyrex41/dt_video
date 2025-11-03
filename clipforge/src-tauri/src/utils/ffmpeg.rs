@@ -58,6 +58,7 @@ pub struct FfmpegBuilder {
     scale_pad: bool,  // Whether to pad to maintain aspect ratio
     volume: Option<f64>,  // Audio volume (0.0-1.0, where 1.0 is 100%)
     muted: bool,  // Whether audio should be muted
+    timeout_secs: Option<u64>,  // Command timeout in seconds
 }
 
 #[derive(Clone)]
@@ -208,6 +209,12 @@ impl FfmpegBuilder {
     /// Mute audio output
     pub fn mute(mut self) -> Self {
         self.muted = true;
+        self
+    }
+
+    /// Set command timeout in seconds
+    pub fn timeout(mut self, seconds: u64) -> Self {
+        self.timeout_secs = Some(seconds);
         self
     }
 
@@ -522,7 +529,7 @@ impl FfmpegBuilder {
         }
     }
 
-    /// Execute command with sidecar fallback
+    /// Execute command with sidecar fallback and optional timeout
     fn execute_command(&self, args: &[String]) -> FFmpegResult<std::process::Output> {
         // Require app_handle for sidecar resolution
         let app_handle = self.app_handle.as_ref()
@@ -540,10 +547,73 @@ impl FfmpegBuilder {
             }
         };
 
-        std::process::Command::new(binary_path)
+        // Spawn the child process
+        let mut child = std::process::Command::new(binary_path)
             .args(args)
-            .output()
-            .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| FFmpegError::CommandSpawn(e.to_string()))?;
+
+        // Handle timeout if specified
+        if let Some(timeout_secs) = self.timeout_secs {
+            let start = std::time::Instant::now();
+            let timeout_duration = std::time::Duration::from_secs(timeout_secs);
+
+            eprintln!("[FFmpeg] ⏱️  Starting command with {}s timeout", timeout_secs);
+
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        // Process finished successfully before timeout
+                        eprintln!("[FFmpeg] ✅ Command completed in {:.2}s", start.elapsed().as_secs_f64());
+
+                        // Collect output
+                        let output = std::process::Output {
+                            status,
+                            stdout: {
+                                use std::io::Read;
+                                let mut buf = Vec::new();
+                                if let Some(mut stdout) = child.stdout.take() {
+                                    let _ = stdout.read_to_end(&mut buf);
+                                }
+                                buf
+                            },
+                            stderr: {
+                                use std::io::Read;
+                                let mut buf = Vec::new();
+                                if let Some(mut stderr) = child.stderr.take() {
+                                    let _ = stderr.read_to_end(&mut buf);
+                                }
+                                buf
+                            },
+                        };
+                        return Ok(output);
+                    }
+                    Ok(None) => {
+                        // Still running - check if timeout exceeded
+                        if start.elapsed() > timeout_duration {
+                            eprintln!("[FFmpeg] ❌ TIMEOUT: Command exceeded {}s limit, killing process", timeout_secs);
+                            let _ = child.kill();
+                            let _ = child.wait(); // Clean up zombie process
+                            return Err(FFmpegError::ExecutionFailed(
+                                format!("FFmpeg timeout exceeded ({}s)", timeout_secs)
+                            ));
+                        }
+                        // Sleep briefly before checking again
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                    Err(e) => {
+                        eprintln!("[FFmpeg] ❌ Error waiting for process: {}", e);
+                        return Err(FFmpegError::ExecutionFailed(e.to_string()));
+                    }
+                }
+            }
+        } else {
+            // No timeout - use regular wait
+            child.wait_with_output()
+                .map_err(|e| FFmpegError::ExecutionFailed(e.to_string()))
+        }
     }
 
     /// Execute the FFmpeg command asynchronously
